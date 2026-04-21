@@ -1,0 +1,1 @@
+"""Screen monitoring: capture, detect, OCR, and click."""

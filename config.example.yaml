@@ -1,0 +1,50 @@
+agent:
+  api_key: ${OPENAI_API_KEY}
+  base_url: https://api.openai.com/v1
+  db_similarity_threshold: 0.9
+  model: gpt-4o
+  prompt_template: src/autoykt/agent/prompts/answer.j2
+  provider: openai
+  timeout: 30
+clicker:
+  confirm_delay: 1.0
+  options_positions:
+    A:
+    - 400
+    - 350
+    B:
+    - 400
+    - 400
+    C:
+    - 400
+    - 450
+    D:
+    - 400
+    - 500
+logging:
+  level: INFO
+  log_dir: storage/logs
+monitor:
+  debounce_frames: 3
+  match_threshold: 0.85
+  monitor_index: 2
+  poll_interval: 0.5
+  roi:
+  - 11
+  - 185
+  - 356
+  - 306
+  template_path: assets/templates/question_region.png
+notifier:
+  enabled:
+  - qq
+  qq:
+    access_token: ${ONEBOT_ACCESS_TOKEN}
+    onebot_url: http://127.0.0.1:4096
+    target_qq: ${QQ_TARGET}
+  telegram:
+    chat_id: YOUR_CHAT_ID
+    token: YOUR_TG_TOKEN_HERE
+ocr:
+  engine: rapidocr
+  vision_llm_model: gpt-4o
