@@ -52,6 +52,12 @@ class Clicker:
         pyautogui.click(x, y)
         return True
 
+    def click_point(self, x: int, y: int) -> bool:
+        """Click an absolute screen coordinate."""
+        logger.info(f"Clicking point at ({x}, {y})")
+        pyautogui.click(x, y)
+        return True
+
     def confirm_result(self, before: np.ndarray | None = None) -> tuple[bool, np.ndarray]:
         """Wait and take a screenshot to confirm the answer was submitted.
 
@@ -95,5 +101,14 @@ class Clicker:
         if not clicked:
             return False, None
 
+        success, frame = self.confirm_result(before=before)
+        return success, frame
+
+    def click_point_and_confirm(self, x: int, y: int) -> tuple[bool, np.ndarray | None]:
+        """Click an absolute point and confirm via change detection."""
+        before = self._capture.grab_frame()
+        clicked = self.click_point(x, y)
+        if not clicked:
+            return False, None
         success, frame = self.confirm_result(before=before)
         return success, frame

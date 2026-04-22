@@ -31,8 +31,12 @@ async def main() -> None:
     parser.add_argument("--detect-only", action="store_true", help="Only detect + notify, skip OCR/Agent/Clicker")
     parser.add_argument("--test-qq", action="store_true", help="Send a test message to QQ and exit")
     parser.add_argument("--monitors", action="store_true", help="Show monitor layout info and exit")
-    parser.add_argument("--config", default="config.example.yaml", help="Config file path")
+    parser.add_argument("--config", default=None, help="Config file path")
     args = parser.parse_args()
+
+    config_path = args.config
+    if config_path is None:
+        config_path = "config.yaml" if Path("config.yaml").exists() else "config.example.yaml"
     # 检测传入参数，选择普通模式/校准模式，或更新config文件
 
     if args.monitors:
@@ -46,13 +50,13 @@ async def main() -> None:
         return
 
     if args.calibrate:
-        config = load_config(args.config)
+        config = load_config(config_path)
         from scripts.calibrate import Calibrator
         Calibrator(monitor_index=config.monitor.monitor_index).run()
         return
 
     if args.test_qq:
-        config = load_config(args.config)
+        config = load_config(config_path)
         setup_logger(level=config.logging.level, log_dir=config.logging.log_dir)
         from autoykt.notifier.qq_bot import QQNotifier
         notifier = QQNotifier(
@@ -67,7 +71,7 @@ async def main() -> None:
         return
 
     # Load config and set up logging
-    config = load_config(args.config)
+    config = load_config(config_path)
     logger = setup_logger(level=config.logging.level, log_dir=config.logging.log_dir)
     logger.info("Auto-Answer System starting...")
     # 读取config文件，初始化logger并发布首条INFO

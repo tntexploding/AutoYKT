@@ -87,11 +87,16 @@ python -m scripts.calibrate
 
 - `1`：标定题目 ROI（点击左上和右下）
 - `2`：标定 A/B/C/D 点击位置
-- `3`：截取模板图片
+- `3`：截取题目模板图片
+- `4`：标定完整题目截图区域（用于提交给 AI）
+- `5`：点击进入题目的位置
+- `6`：依次标定ABCD的标准样式
+- `7`：标定提交答案的位置
 - `s`：保存到配置
 - `q`：退出
 
 模板会保存到 `assets/templates/question_region.png`。
+标定结果会优先写入 `config.yaml`，如果不存在则写入 `config.example.yaml`。
 
 ## 运行方式
 
@@ -138,9 +143,13 @@ python -m scripts.test_monitor --all
 - `monitor.template_path`：题目模板路径
 - `monitor.match_threshold`：模板匹配阈值（0~1）
 - `agent.model`：视觉模型名
+- `agent.models`：并行提交的模型列表
+- `agent.answer_count`：本次并发回答的模型数量，默认使用列表前 N 个模型
 - `agent.base_url`：OpenAI 兼容 API 地址
+- `agent.auto_click`：是否在拿到回答后继续自动点击；关闭时只发送原始回答到 QQ/TG
 - `clicker.options_positions`：A/B/C/D 屏幕坐标
 - `notifier.enabled`：通知后端列表（`qq` / `telegram`）
+- `notifier.qq.target_qq`：QQ 号，支持直接填写数字或使用 `${QQ_TARGET}` 环境变量占位符
 
 ## 日志与产物
 
