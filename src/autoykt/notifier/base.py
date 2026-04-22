@@ -40,16 +40,34 @@ class BaseNotifier(ABC):
             logger.error(f"[{self.name}] Failed to send question: {e}")
 
     async def _on_answer(self, event: Event) -> None:
+        raw_responses = event.payload.get("raw_responses")
         answer = event.payload.get("answer", "?")
+        answer_option = event.payload.get("answer_option", "")
         source = event.payload.get("source", "unknown")
         confidence = event.payload.get("confidence", 0.0)
 
-        text = (
-            f"✅ 答案生成\n\n"
-            f"答案: {answer}\n"
-            f"来源: {source}\n"
-            f"置信度: {confidence:.0%}"
-        )
+        if raw_responses:
+            sections = []
+            for item in raw_responses:
+                model = item.get("model", "unknown")
+                raw_response = item.get("raw_response", "")
+                sections.append(f"[{model}]\n{raw_response}")
+
+            text = (
+                f"🧠 模型原始回答\n\n"
+                f"来源: {source}\n"
+                f"置信度: {confidence:.0%}\n\n"
+                + "\n\n".join(sections)
+            )
+            if answer_option:
+                text += f"\n\n🎯 提取选项: {answer_option}"
+        else:
+            text = (
+                f"✅ 答案生成\n\n"
+                f"答案: {answer}\n"
+                f"来源: {source}\n"
+                f"置信度: {confidence:.0%}"
+            )
 
         try:
             await self.send_text(text)
@@ -59,15 +77,28 @@ class BaseNotifier(ABC):
     async def _on_click_done(self, event: Event) -> None:
         success = event.payload.get("success", False)
         answer = event.payload.get("answer", "?")
+        finish_clicked = event.payload.get("finish_clicked", False)
+        located_path = event.payload.get("located_option_screenshot_path")
         confirm_path = event.payload.get("confirm_screenshot_path")
+        post_submit_task_path = event.payload.get("post_submit_task_screenshot_path")
 
-        status = "✅ 成功" if success else "❌ 可能失败"
-        text = f"📋 答题完成\n\n选项: {answer}\n状态: {status}"
+        status = "✅ 成功" if success else "⚠️ 提交后变化不明显"
+        finish_status = "✅ 已点击" if finish_clicked else "⏭️ 未配置或未点击"
+        text = (
+            f"📋 答题完成\n\n"
+            f"选项: {answer}\n"
+            f"状态: {status}\n"
+            f"提交按钮: {finish_status}"
+        )
 
         try:
             await self.send_text(text)
+            if located_path and Path(located_path).exists():
+                await self.send_image(located_path, caption="选项识别与点击定位截图")
             if confirm_path and Path(confirm_path).exists():
                 await self.send_image(confirm_path, caption="答题结果截图")
+            if post_submit_task_path and Path(post_submit_task_path).exists():
+                await self.send_image(post_submit_task_path, caption="点击提交后 task 区域截图")
         except Exception as e:
             logger.error(f"[{self.name}] Failed to send result: {e}")
 

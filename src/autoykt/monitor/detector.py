@@ -89,3 +89,58 @@ class QuestionDetector:
             logger.info(f"Template reloaded: {tpl_path}")
         else:
             logger.error(f"Template not found: {template_path}")
+
+
+class OptionTemplateDetector:
+    """Detect option marker templates (A/B/C/D) inside a task region image."""
+
+    def __init__(
+        self,
+        template_paths: dict[str, str],
+        threshold: float = 0.85,
+    ) -> None:
+        self._threshold = threshold
+        self._templates: dict[str, np.ndarray] = {}
+
+        for key, path in template_paths.items():
+            opt = key.strip().upper()
+            tpl_path = Path(path)
+            if not tpl_path.exists():
+                logger.warning(f"Option template not found: {path}")
+                continue
+            img = cv2.imread(str(tpl_path), cv2.IMREAD_COLOR)
+            if img is None:
+                logger.warning(f"Failed to load option template: {path}")
+                continue
+            self._templates[opt] = img
+
+        if self._templates:
+            logger.info(f"Loaded option templates: {sorted(self._templates.keys())}")
+
+    def detect(self, frame: np.ndarray) -> dict[str, dict[str, float | tuple[int, int]]]:
+        """Return best local center point for each detected option template.
+
+        Result format:
+            {
+                "A": {"center": (x, y), "score": 0.93},
+                ...
+            }
+        """
+        results: dict[str, dict[str, float | tuple[int, int]]] = {}
+
+        for key, template in self._templates.items():
+            result = cv2.matchTemplate(frame, template, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(result)
+            if max_val < self._threshold:
+                continue
+
+            h, w = template.shape[:2]
+            center = (max_loc[0] + w // 2, max_loc[1] + h // 2)
+            results[key] = {
+                "center": center,
+                "score": float(max_val),
+                "top_left": max_loc,
+                "size": (w, h),
+            }
+
+        return results

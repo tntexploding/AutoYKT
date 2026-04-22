@@ -2,10 +2,10 @@
 
 import asyncio
 import base64
-import json
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from jinja2 import Template
 from openai import OpenAI
@@ -20,8 +20,8 @@ logger = logging.getLogger("auto_answer")
 class AnswerAgent:
     """Subscribes to QUESTION_DETECTED, produces ANSWER_READY.
 
-    Flow: receive question → check cache → (miss) call LLM → parse answer →
-          store in cache → publish answer event.
+    Flow: receive question → check cache → call one or more LLMs in parallel →
+        store raw outputs in cache → publish answer event.
     """
 
     def __init__(self, config: AppConfig, event_bus: EventBus) -> None:
@@ -33,8 +33,9 @@ class AnswerAgent:
             api_key=config.agent.api_key,
             base_url=config.agent.base_url or None,
         )
-        self._model = config.agent.model
+        self._models = self._resolve_models(config.agent.models, config.agent.model, config.agent.answer_count)
         self._timeout = config.agent.timeout
+        self._auto_click = config.agent.auto_click
 
         # Load prompt template
         tpl_path = Path(config.agent.prompt_template)
@@ -44,9 +45,13 @@ class AnswerAgent:
         else:
             # Fallback inline template
             self._template = Template(
-                "请回答以下选择题，只返回选项字母。\n\n"
+                "请根据题目截图直接作答。\n\n"
                 "题目：{{ question }}\n\n"
-                "{% for key, value in options.items() %}{{ key }}. {{ value }}\n{% endfor %}\n"
+                "{% if options %}选项：\n{% for key, value in options.items() %}{{ key }}. {{ value }}\n{% endfor %}{% endif %}\n"
+                "要求：\n"
+                "1. 先给出简要判断依据\n"
+                "2. 最后一行输出你认为最可能正确的答案\n"
+                "3. 如果无法确定，也要给出最可能的选择\n\n"
                 "答案："
             )
             logger.warning(f"Template not found at {tpl_path}, using fallback.")
@@ -60,6 +65,13 @@ class AnswerAgent:
         # Subscribe to question events
         self._bus.subscribe(EventType.QUESTION_DETECTED, self._on_question)
 
+    @staticmethod
+    def _resolve_models(models: list[str], fallback_model: str, answer_count: int) -> list[str]:
+        candidates = [model.strip() for model in models if model.strip()] or [fallback_model.strip()]
+        if answer_count >= len(candidates):
+            return candidates
+        return candidates[:answer_count]
+
     async def _on_question(self, event: Event) -> None:
         """Handle a detected question: send screenshot to vision LLM."""
         screenshot_path = event.payload.get("screenshot_path", "")
@@ -70,11 +82,11 @@ class AnswerAgent:
             logger.warning("No screenshot available, ignoring.")
             return
 
-        logger.info(f"Agent received question with screenshot: {screenshot_path}")
+        logger.info(f"Agent received question with screenshot: {screenshot_path}; models={self._models}")
 
-        # Step 1: call vision LLM with screenshot
+        # Step 1: call vision LLMs with screenshot in parallel
         try:
-            answer, raw_response = await self._query_vision_llm(screenshot_path)
+            responses = await self._query_vision_llms(screenshot_path)
         except Exception as e:
             logger.error(f"Vision LLM call failed: {e}")
             await self._bus.publish(Event(
@@ -83,21 +95,55 @@ class AnswerAgent:
             ))
             return
 
-        # Step 2: store in cache (use raw_response as question_text for future reference)
+        raw_blob = "\n\n".join(
+            f"[{item['model']}]\n{item['raw_response']}" for item in responses
+        )
+        answer_option = self._summarize_answer_option(responses)
+
+        # Step 2: store raw outputs in cache for later lookup
         self._db.store(
-            question_text=raw_response,
+            question_text=raw_blob,
             options="",
-            answer=answer,
+            answer=raw_blob,
             confidence=1.0,
-            source=f"vision:{self._model}",
+            source=f"vision:{','.join(item['model'] for item in responses)}",
         )
 
-        # Step 3: publish answer
+        # Step 3: publish raw answers
         await self._publish_answer(
-            answer=answer,
-            source=f"vision:{self._model}",
+            raw_responses=responses,
+            answer_option=answer_option,
+            source=f"vision:{','.join(item['model'] for item in responses)}",
             confidence=1.0,
         )
+
+    @staticmethod
+    def _extract_option_letter(text: str) -> str | None:
+        patterns = [
+            r"答案\s*[：:]\s*([A-Da-d])",
+            r"\b([A-Da-d])\b",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                return match.group(1).upper()
+        return None
+
+    def _summarize_answer_option(self, responses: list[dict[str, str]]) -> str:
+        votes: dict[str, int] = {}
+        for item in responses:
+            raw = item.get("raw_response", "")
+            opt = self._extract_option_letter(raw)
+            if not opt:
+                continue
+            votes[opt] = votes.get(opt, 0) + 1
+
+        if not votes:
+            return ""
+
+        best = sorted(votes.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+        logger.info(f"Summarized option vote: {votes}, selected={best}")
+        return best
 
     @staticmethod
     def _encode_image(image_path: str) -> str:
@@ -105,9 +151,13 @@ class AnswerAgent:
         with open(image_path, "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
 
-    async def _query_vision_llm(self, screenshot_path: str) -> tuple[str, str]:
-        """Send screenshot to vision LLM, return (parsed_answer, raw_response)."""
+    async def _query_single_model(self, model: str, screenshot_path: str) -> dict[str, str]:
+        """Send screenshot to one vision LLM and return its raw response."""
         b64_image = self._encode_image(screenshot_path)
+        prompt_text = self._template.render(
+            question="请直接根据截图中的题目作答",
+            options={},
+        )
 
         messages = [
             {
@@ -115,13 +165,7 @@ class AnswerAgent:
                 "content": [
                     {
                         "type": "text",
-                        "text": (
-                            "这是一道选择题的截图。请仔细阅读题目和所有选项，"
-                            "给出正确答案的选项字母（A/B/C/D）。\n\n"
-                            "要求：\n"
-                            "1. 先简要分析题目（一两句话）\n"
-                            "2. 最后一行只输出一个大写字母作为答案，格式为：答案：X"
-                        ),
+                        "text": prompt_text,
                     },
                     {
                         "type": "image_url",
@@ -139,7 +183,7 @@ class AnswerAgent:
         response = await loop.run_in_executor(
             None,
             lambda: self._client.chat.completions.create(
-                model=self._model,
+                model=model,
                 messages=messages,
                 max_tokens=200,
                 temperature=0.1,
@@ -148,60 +192,32 @@ class AnswerAgent:
         )
 
         raw_answer = response.choices[0].message.content or ""
-        logger.info(f"Vision LLM response:\n{raw_answer}")
+        logger.info(f"Vision LLM response from {model}:\n{raw_answer}")
+        return {"model": model, "raw_response": raw_answer}
 
-        parsed = self._parse_answer(raw_answer)
-        if parsed:
-            return parsed, raw_answer
+    async def _query_vision_llms(self, screenshot_path: str) -> list[dict[str, str]]:
+        tasks = [self._query_single_model(model, screenshot_path) for model in self._models]
+        results = await asyncio.gather(*tasks)
+        return results
 
-        # Fallback
-        fallback = raw_answer.strip()[-1:].upper()
-        if fallback in ("A", "B", "C", "D"):
-            logger.warning(f"Used fallback parsing for: '{raw_answer}'")
-            return fallback, raw_answer
-
-        logger.error(f"Cannot parse answer from: '{raw_answer}'")
-        raise ValueError(f"Unparseable vision LLM response: {raw_answer}")
-
-    @staticmethod
-    def _parse_answer(text: str) -> str:
-        """Extract a single option letter (A/B/C/D) from LLM response.
-
-        Handles formats like:
-            "B"
-            "B. len"
-            "答案是B"
-            "The answer is C."
-        """
-        text = text.strip()
-
-        # Direct single letter
-        if len(text) == 1 and text.upper() in "ABCD":
-            return text.upper()
-
-        # Look for patterns like "答案是X", "answer is X", just "X." etc.
-        patterns = [
-            r"^([A-Da-d])\b",           # starts with option letter
-            r"答案[是为：:\s]*([A-Da-d])",  # 答案是X / 答案：X
-            r"answer\s*(?:is)?\s*[:：]?\s*([A-Da-d])",  # answer is X
-            r"\b([A-Da-d])\s*[.。)）]",  # X. or X)
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                return match.group(1).upper()
-
-        return ""
-
-    async def _publish_answer(self, answer: str, source: str, confidence: float) -> None:
+    async def _publish_answer(
+        self,
+        raw_responses: list[dict[str, str]],
+        answer_option: str,
+        source: str,
+        confidence: float,
+    ) -> None:
         """Publish ANSWER_READY event."""
-        logger.info(f"Publishing answer: '{answer}' (source={source}, conf={confidence})")
+        logger.info(f"Publishing {len(raw_responses)} raw answer(s) (source={source}, conf={confidence})")
         await self._bus.publish(Event(
             type=EventType.ANSWER_READY,
             payload={
-                "answer": answer,
+                "raw_responses": raw_responses,
+                "answer": answer_option,
+                "answer_option": answer_option,
                 "source": source,
                 "confidence": confidence,
+                "auto_click": self._auto_click,
             },
         ))
 

@@ -15,7 +15,7 @@ logger = logging.getLogger("auto_answer")
 class QQNotifier(BaseNotifier):
     """Push notifications to a QQ account via OneBot HTTP API."""
 
-    def __init__(self, event_bus: EventBus, onebot_url: str, target_qq: str, access_token: str = "") -> None:
+    def __init__(self, event_bus: EventBus, onebot_url: str, target_qq: int | str, access_token: str = "") -> None:
         super().__init__(event_bus)
         self._url = onebot_url.rstrip("/")
         self._target = int(target_qq)

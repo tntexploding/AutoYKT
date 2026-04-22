@@ -3,6 +3,11 @@ agent:
   base_url: https://api.openai.com/v1
   db_similarity_threshold: 0.9
   model: gpt-4o
+  models:
+  - gpt-4o
+  - gpt-5.4
+  answer_count: 2
+  auto_click: false
   prompt_template: src/autoykt/agent/prompts/answer.j2
   provider: openai
   timeout: 30
@@ -26,22 +31,46 @@ logging:
   log_dir: storage/logs
 monitor:
   debounce_frames: 3
+  entry_roi: null
+  finish_task_roi: null
+  finish_click_delay: 0.5
+  feature_roi:
+  - 63
+  - 96
+  - 590
+  - 714
   match_threshold: 0.85
   monitor_index: 2
   poll_interval: 0.5
+  question_roi: null
   roi:
-  - 11
-  - 185
-  - 356
-  - 306
+  - 63
+  - 96
+  - 590
+  - 714
+  post_answer_resume_change_hits: 2
+  post_answer_resume_change_ratio: 0.18
+  task_ready_stable_frames: 2
+  task_ready_timeout: 2.0
+  task_roi: null
   template_path: assets/templates/question_region.png
+detector:
+  option_match_method: TM_CCOEFF_NORMED
+  option_match_threshold: 0.85
+  option_nms_iou: 0.3
+  option_templates:
+    A: assets/templates/options/A.png
+    B: assets/templates/options/B.png
+    C: assets/templates/options/C.png
+    D: assets/templates/options/D.png
+  question_feature_template_path: assets/templates/question_region.png
 notifier:
   enabled:
   - qq
   qq:
     access_token: ${ONEBOT_ACCESS_TOKEN}
     onebot_url: http://127.0.0.1:4096
-    target_qq: ${QQ_TARGET}
+    target_qq: 1145141919
   telegram:
     chat_id: YOUR_CHAT_ID
     token: YOUR_TG_TOKEN_HERE
