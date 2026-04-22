@@ -16,9 +16,7 @@ venv/
 .idea/
 
 # Runtime artifacts
-storage/logs/
-storage/screenshots/
-storage/data/*.db
+storage/
 
 # Local config and secrets
 config.yaml
