@@ -23,6 +23,9 @@ storage/data/*.db
 # Local config and secrets
 config.yaml
 .env
+commands.txt
+example.png
+example2.png
 
 # OS
 .DS_Store
