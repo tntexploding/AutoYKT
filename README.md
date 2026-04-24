@@ -9,8 +9,8 @@
 - 题目出现检测：OpenCV 模板匹配 + 防抖触发（debounce）
 - 视觉答题：支持图片输入的 OpenAI 兼容接口
 - 自动作答：解析 A/B/C/D 并模拟鼠标点击
-- 结果回传：QQ OneBot / Telegram Bot 通知
-- 本地缓存：SQLite 存储历史问答
+- 结果回传：QQ OneBot / Telegram Bot(暂未适配) 通知
+- 本地缓存：SQLite 存储历史问答(建议关闭，没用)
 - 运行日志：JSONL 结构化日志
 
 ## 工作流程
@@ -80,8 +80,10 @@ $env:QQ_TARGET="<qq_number>"
 ## 首次标定
 
 ```bash
-python -m scripts.calibrate
+python main.py --calibrate
 ```
+
+标定时注意显示器的缩放比例。
 
 按键说明：
 
@@ -100,13 +102,22 @@ python -m scripts.calibrate
 
 ## 运行方式
 
+初次上手：首次标定--测试QQ连接--测试特征检测--正式运行
+
+```bash
+python main.py --calibrate --config config.yaml   #标定
+python main.py --test-qq --config config.yaml     #测试QQ
+python main.py --detect-only --config config.yaml #测试特征
+python main.py --config config.yaml               #运行
+```
+
 ### 1. 查看显示器索引
 
 ```bash
 python main.py --monitors
 ```
 
-### 2. 仅检测模式（不调用 AI/不点击）
+### 2. 仅检测模式（不调用 AI，不点击）
 
 ```bash
 python main.py --detect-only --config config.yaml
@@ -134,7 +145,6 @@ python -m scripts.test_monitor --all
 
 - `--capture` 仅测截图
 - `--detect` 仅测检测
-- `--ocr` 仅测 OCR
 - `--click A` 测试点击流程提示
 
 ## 关键配置项
@@ -142,11 +152,16 @@ python -m scripts.test_monitor --all
 - `monitor.roi`：截图区域 `[x, y, width, height]`
 - `monitor.template_path`：题目模板路径
 - `monitor.match_threshold`：模板匹配阈值（0~1）
+- `monitor.post_answer_resume_by_change_enabled`：是否启用“答题后基于 ROI 像素变化恢复检测”
+- `monitor.post_answer_resume_change_ratio`：判定恢复所需的像素变化比例阈值
+- `monitor.post_answer_resume_change_hits`：连续满足阈值的次数要求
 - `agent.model`：视觉模型名
 - `agent.models`：并行提交的模型列表
 - `agent.answer_count`：本次并发回答的模型数量，默认使用列表前 N 个模型
+- `agent.min_response_count`：超时后继续流程所需的最少模型回答条数
 - `agent.base_url`：OpenAI 兼容 API 地址
 - `agent.auto_click`：是否在拿到回答后继续自动点击；关闭时只发送原始回答到 QQ/TG
+- `agent.question_db_enabled`：是否启用过往问答数据库缓存
 - `clicker.options_positions`：A/B/C/D 屏幕坐标
 - `notifier.enabled`：通知后端列表（`qq` / `telegram`）
 - `notifier.qq.target_qq`：QQ 号，支持直接填写数字或使用 `${QQ_TARGET}` 环境变量占位符
@@ -159,11 +174,12 @@ python -m scripts.test_monitor --all
 
 ## 常见问题
 
-1. 检测不到题目
+1. 检测不到题目/标定界面显示问题
 
 - 重新标定模板，保证模板来自当前页面样式。
 - 降低 `monitor.match_threshold`（例如 0.85 -> 0.80）。
 - 确认 `monitor_index` 与 `roi` 对应正确显示器。
+- 注意windows屏幕设置中的缩放比例，缩放会影响标定界面的正常显示。
 
 1. 识别答案慢或失败
 
@@ -179,6 +195,11 @@ python -m scripts.test_monitor --all
 
 - 检查 OneBot 服务地址和 token。
 - 先执行 `--test-qq` 单独验证通道。
+
+1. 识别系统多次识别同一题目
+
+- 在标定“3，题目区域”时，在题目PPT未被选中的情况下标定，要包含一小部分PPT灰色边框。
+- 原理：识别-答题流程会自动点击PPT页面，此时灰色边框变为蓝色，题目特征和标定特征显著不同，避免重复识别。
 
 ## 开发说明
 

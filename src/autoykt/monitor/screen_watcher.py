@@ -122,7 +122,7 @@ class ScreenWatcher:
         frame = self._feature_capture.grab_frame()                              #获取到指定区域截图
         detected, confidence, location = self._detector.detect(frame)
 
-        if self._post_answer_paused:
+        if self._config.monitor.post_answer_resume_by_change_enabled and self._post_answer_paused:
             if self._post_answer_baseline is None:
                 self._post_answer_baseline = frame
                 return
@@ -210,9 +210,10 @@ class ScreenWatcher:
                 self._pending_answer,
                 timeout=self._config.agent.timeout + 5,
             )
-            self._post_answer_paused = True
-            self._post_answer_change_hits = 0
-            self._post_answer_baseline = self._feature_capture.grab_frame()
+            if self._config.monitor.post_answer_resume_by_change_enabled:
+                self._post_answer_paused = True
+                self._post_answer_change_hits = 0
+                self._post_answer_baseline = self._feature_capture.grab_frame()
             await self._execute_answer(answer)                                  #等待点击答案完成
         except asyncio.TimeoutError:                                            #如果出了问题
             logger.error("Timed out waiting for answer.")
@@ -338,9 +339,10 @@ class ScreenWatcher:
 
         # Reset detector for next question
         self._detector.reset()                                                  #重置，等待下一个循环
-        self._post_answer_paused = True
-        self._post_answer_change_hits = 0
-        self._post_answer_baseline = self._feature_capture.grab_frame()
+        if self._config.monitor.post_answer_resume_by_change_enabled:
+            self._post_answer_paused = True
+            self._post_answer_change_hits = 0
+            self._post_answer_baseline = self._feature_capture.grab_frame()
         logger.info(f"Answer cycle complete. success={success}")
 
     @staticmethod
