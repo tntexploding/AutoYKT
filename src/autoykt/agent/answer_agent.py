@@ -35,7 +35,9 @@ class AnswerAgent:
         )
         self._models = self._resolve_models(config.agent.models, config.agent.model, config.agent.answer_count)
         self._timeout = config.agent.timeout
+        self._min_response_count = config.agent.min_response_count
         self._auto_click = config.agent.auto_click
+        self._question_db_enabled = config.agent.question_db_enabled
 
         # Load prompt template
         tpl_path = Path(config.agent.prompt_template)
@@ -57,10 +59,14 @@ class AnswerAgent:
             logger.warning(f"Template not found at {tpl_path}, using fallback.")
 
         # Question cache
-        self._db = QuestionDB(
-            db_path="storage/data/questions.db",
-            similarity_threshold=config.agent.db_similarity_threshold,
-        )
+        self._db: QuestionDB | None = None
+        if self._question_db_enabled:
+            self._db = QuestionDB(
+                db_path="storage/data/questions.db",
+                similarity_threshold=config.agent.db_similarity_threshold,
+            )
+        else:
+            logger.info("QuestionDB disabled by config; cache storage will be skipped.")
 
         # Subscribe to question events
         self._bus.subscribe(EventType.QUESTION_DETECTED, self._on_question)
@@ -95,19 +101,48 @@ class AnswerAgent:
             ))
             return
 
+        if not responses:
+            logger.error("No model responses received before timeout; skipping this question.")
+            await self._bus.publish(Event(
+                type=EventType.ERROR,
+                payload={
+                    "source": "answer_agent",
+                    "error": "No model responses received before timeout",
+                },
+            ))
+            return
+
+        if len(responses) < self._min_response_count:
+            logger.error(
+                "Insufficient model responses before timeout: "
+                f"got {len(responses)}, required {self._min_response_count}."
+            )
+            await self._bus.publish(Event(
+                type=EventType.ERROR,
+                payload={
+                    "source": "answer_agent",
+                    "error": (
+                        "Insufficient model responses before timeout "
+                        f"({len(responses)}/{self._min_response_count})"
+                    ),
+                },
+            ))
+            return
+
         raw_blob = "\n\n".join(
             f"[{item['model']}]\n{item['raw_response']}" for item in responses
         )
         answer_option = self._summarize_answer_option(responses)
 
         # Step 2: store raw outputs in cache for later lookup
-        self._db.store(
-            question_text=raw_blob,
-            options="",
-            answer=raw_blob,
-            confidence=1.0,
-            source=f"vision:{','.join(item['model'] for item in responses)}",
-        )
+        if self._db is not None:
+            self._db.store(
+                question_text=raw_blob,
+                options="",
+                answer=raw_blob,
+                confidence=1.0,
+                source=f"vision:{','.join(item['model'] for item in responses)}",
+            )
 
         # Step 3: publish raw answers
         await self._publish_answer(
@@ -196,9 +231,31 @@ class AnswerAgent:
         return {"model": model, "raw_response": raw_answer}
 
     async def _query_vision_llms(self, screenshot_path: str) -> list[dict[str, str]]:
-        tasks = [self._query_single_model(model, screenshot_path) for model in self._models]
-        results = await asyncio.gather(*tasks)
-        return results
+        task_by_model: dict[asyncio.Task[dict[str, str]], str] = {}
+        for model in self._models:
+            task = asyncio.create_task(self._query_single_model(model, screenshot_path))
+            task_by_model[task] = model
+
+        responses: list[dict[str, str]] = []
+        try:
+            for done_task in asyncio.as_completed(task_by_model.keys(), timeout=self._timeout):
+                try:
+                    result = await done_task
+                    responses.append(result)
+                except Exception as e:
+                    model = task_by_model.get(done_task, "unknown")
+                    logger.warning(f"Vision LLM model failed ({model}): {e}")
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"Vision LLM partial timeout reached ({self._timeout}s). "
+                f"Using {len(responses)} available response(s)."
+            )
+        finally:
+            for task in task_by_model:
+                if not task.done():
+                    task.cancel()
+
+        return responses
 
     async def _publish_answer(
         self,
@@ -223,4 +280,5 @@ class AnswerAgent:
 
     def close(self) -> None:
         """Release resources."""
-        self._db.close()
+        if self._db is not None:
+            self._db.close()

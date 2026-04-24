@@ -22,6 +22,7 @@ class MonitorConfig(BaseModel):
     task_ready_timeout: float = 2.0
     task_ready_stable_frames: int = 2
     finish_click_delay: float = 0.5
+    post_answer_resume_by_change_enabled: bool = True
     post_answer_resume_change_ratio: float = 0.18
     post_answer_resume_change_hits: int = 2
     match_threshold: float = 0.85
@@ -62,7 +63,9 @@ class AgentConfig(BaseModel):
     model: str = "gpt-4o"
     models: list[str] = Field(default_factory=list)
     answer_count: int = 1
+    min_response_count: int = 1
     auto_click: bool = False
+    question_db_enabled: bool = True
     api_key: str = ""
     base_url: str = "https://api.openai.com/v1"
     prompt_template: str = "src/autoykt/agent/prompts/answer.j2"
@@ -74,6 +77,13 @@ class AgentConfig(BaseModel):
     def _validate_answer_count(cls, value: int) -> int:
         if value < 1:
             raise ValueError("agent.answer_count must be greater than 0")
+        return value
+
+    @field_validator("min_response_count")
+    @classmethod
+    def _validate_min_response_count(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("agent.min_response_count must be greater than 0")
         return value
 
 

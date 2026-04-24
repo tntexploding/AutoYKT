@@ -7,7 +7,9 @@ agent:
   - gpt-4o
   - gpt-5.4
   answer_count: 2
+  min_response_count: 1
   auto_click: false
+  question_db_enabled: false
   prompt_template: src/autoykt/agent/prompts/answer.j2
   provider: openai
   timeout: 30
@@ -34,6 +36,7 @@ monitor:
   entry_roi: null
   finish_task_roi: null
   finish_click_delay: 0.5
+  post_answer_resume_by_change_enabled: true
   feature_roi:
   - 63
   - 96
