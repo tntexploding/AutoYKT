@@ -212,3 +212,7 @@ python -m scripts.test_monitor --all
 - 不要将真实 API Key、QQ 号、Token 写入版本库。
 - 使用环境变量注入敏感信息。
 - 提交前检查 `config.yaml` 与日志截图是否包含隐私数据。
+
+## 开源协议
+
+本项目采用 [MIT License](LICENSE) 开源协议。
