@@ -1,171 +1,152 @@
-"""OCR engine abstraction layer - supports RapidOCR (local) and Vision LLM (remote)."""
+"""Local OCR abstraction used by questions and live course capture."""
 
-import base64
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from collections.abc import Mapping
 import logging
 import re
-from abc import ABC, abstractmethod
-from pathlib import Path
 
-import cv2
 import numpy as np
 
-logger = logging.getLogger("auto_answer")
+from autoykt.monitor.detector import OptionMatch
 
 
+logger = logging.getLogger("autoykt")
+
+
+@dataclass(frozen=True)
+class OcrLine:
+    """One OCR text line with bounds relative to its source frame."""
+
+    text: str
+    bounds: tuple[int, int, int, int]
+
+
+@dataclass(frozen=True)
 class OcrResult:
-    """Structured OCR output: question text + options."""
+    """Text and best-effort multiple-choice structure from one frame."""
 
-    def __init__(self, raw_text: str, question: str = "", options: dict[str, str] | None = None) -> None:
-        self.raw_text = raw_text
-        self.question = question
-        self.options = options or {}
-
-    def __repr__(self) -> str:
-        opts = " | ".join(f"{k}: {v}" for k, v in self.options.items())
-        return f"Q: {self.question}\nOptions: {opts}"
+    raw_text: str
+    question: str = ""
+    options: dict[str, str] = field(default_factory=dict)
+    lines: tuple[OcrLine, ...] = ()
 
 
 class BaseOcrEngine(ABC):
-    """Abstract OCR engine interface."""
+    """Interface for local OCR implementations."""
 
     @abstractmethod
     def recognize(self, frame: np.ndarray) -> OcrResult:
-        """Run OCR on a BGR numpy frame and return structured result."""
-        ...
+        """Recognize text from one BGR frame."""
 
 
 class RapidOcrEngine(BaseOcrEngine):
-    """Local OCR using RapidOCR - good Chinese + English support, no network needed."""
+    """Recognize Chinese and Latin text with RapidOCR."""
+
+    _OPTION_PATTERN = re.compile(r"^([A-Za-z0-9])\s*[.。、:：)）]\s*(.+)")
 
     def __init__(self) -> None:
-        from rapidocr_onnxruntime import RapidOCR
+        from rapidocr_onnxruntime import (  # pylint: disable=import-outside-toplevel
+            RapidOCR,
+        )
+
         self._engine = RapidOCR()
-        logger.info("RapidOCR engine initialized.")
 
     def recognize(self, frame: np.ndarray) -> OcrResult:
+        """Return OCR lines and a conservative question/options split."""
         result, _ = self._engine(frame)
         if not result:
-            logger.warning("RapidOCR returned empty result.")
             return OcrResult(raw_text="")
-
-        # result is list of [bbox, text, confidence]
-        lines = [item[1] for item in result]
-        raw_text = "\n".join(lines)
+        lines = [
+            str(item[1]).strip() for item in result if str(item[1]).strip()
+        ]
         question, options = self._parse_question(lines)
+        return OcrResult(
+            raw_text="\n".join(lines),
+            question=question,
+            options=options,
+            lines=tuple(
+                _ocr_line(item) for item in result if str(item[1]).strip()
+            ),
+        )
 
-        logger.debug(f"OCR recognized {len(lines)} lines.")
-        return OcrResult(raw_text=raw_text, question=question, options=options)
-
-    # Matches lines like: A. xxx / A、xxx / A: xxx / A) xxx / A xxx
-    _OPTION_RE = re.compile(r'^([A-Da-d])\s*[.。、:：)）]\s*(.+)')
-
-    @staticmethod
-    def _parse_question(lines: list[str]) -> tuple[str, dict[str, str]]:
-        """Parse raw OCR lines into question text and options dict.
-
-        Heuristic: lines matching 'X. text' pattern (where X is A-D) are options,
-        everything before the first option is the question.
-        """
+    @classmethod
+    def _parse_question(cls, lines: list[str]) -> tuple[str, dict[str, str]]:
         question_lines: list[str] = []
         options: dict[str, str] = {}
         found_option = False
-
         for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-
-            match = RapidOcrEngine._OPTION_RE.match(stripped)
+            match = cls._OPTION_PATTERN.match(line)
             if match:
-                key = match.group(1).upper()
-                value = match.group(2).strip()
-                options[key] = value
+                options[match.group(1).upper()] = match.group(2).strip()
                 found_option = True
             elif not found_option:
-                question_lines.append(stripped)
-
-        question = " ".join(question_lines)
-        return question, options
+                question_lines.append(line)
+        return " ".join(question_lines), options
 
 
-class VisionLlmOcrEngine(BaseOcrEngine):
-    """Use a Vision LLM (e.g. GPT-4o) to read the screenshot directly.
-
-    More accurate for complex layouts but requires network and costs tokens.
-    """
-
-    def __init__(self, model: str = "gpt-4o", api_key: str = "", base_url: str = "") -> None:
-        from openai import OpenAI
-        self._client = OpenAI(api_key=api_key, base_url=base_url or None)
-        self._model = model
-        logger.info(f"Vision LLM OCR engine initialized with model={model}")
-
-    def recognize(self, frame: np.ndarray) -> OcrResult:
-        # Encode frame to base64 PNG
-        _, buffer = cv2.imencode(".png", frame)
-        b64_image = base64.b64encode(buffer).decode("utf-8")
-
-        response = self._client.chat.completions.create(
-            model=self._model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                "这是一道题目的截图。请识别并输出：\n"
-                                "1. 题目内容（一行）\n"
-                                "2. 每个选项，格式为 A: xxx\\nB: xxx\\nC: xxx\\nD: xxx\n"
-                                "只输出题目和选项，不要其他内容。"
-                            ),
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{b64_image}"},
-                        },
-                    ],
-                }
-            ],
-            max_tokens=500,
-        )
-
-        raw_text = response.choices[0].message.content or ""
-        question, options = self._parse_vision_response(raw_text)
-        return OcrResult(raw_text=raw_text, question=question, options=options)
-
-    @staticmethod
-    def _parse_vision_response(text: str) -> tuple[str, dict[str, str]]:
-        """Parse the LLM's structured text response into question + options."""
-        lines = text.strip().split("\n")
-        question_parts: list[str] = []
-        options: dict[str, str] = {}
-
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-            # Match "A: xxx" or "A. xxx"
-            if len(stripped) >= 3 and stripped[0] in "ABCD" and stripped[1] in ":：.、":
-                key = stripped[0]
-                value = stripped[2:].strip()
-                options[key] = value
-            else:
-                question_parts.append(stripped)
-
-        question = " ".join(question_parts)
-        return question, options
-
-
-def create_ocr_engine(engine_type: str = "rapidocr", **kwargs) -> BaseOcrEngine:
-    """Factory function to create the appropriate OCR engine."""
+def create_ocr_engine(engine_type: str = "rapidocr") -> BaseOcrEngine:
+    """Create a supported local OCR engine."""
     if engine_type == "rapidocr":
         return RapidOcrEngine()
-    elif engine_type == "vision_llm":
-        return VisionLlmOcrEngine(
-            model=kwargs.get("model", "gpt-4o"),
-            api_key=kwargs.get("api_key", ""),
-            base_url=kwargs.get("base_url", ""),
-        )
-    else:
-        raise ValueError(f"Unknown OCR engine type: {engine_type}")
+    raise ValueError(f"unknown OCR engine: {engine_type}")
+
+
+def _ocr_line(item: list) -> OcrLine:
+    points = np.asarray(item[0])
+    left, top = points.min(axis=0)
+    right, bottom = points.max(axis=0)
+    return OcrLine(
+        str(item[1]).strip(),
+        (int(left), int(top), int(right - left), int(bottom - top)),
+    )
+
+
+def format_question_text(
+    result: OcrResult,
+    matches: Mapping[str, OptionMatch],
+) -> str:
+    """Pair nearby text with letter buttons without assuming row order."""
+    if (
+        not result.lines
+        or not matches
+        or any(match["ambiguous"] for match in matches.values())
+    ):
+        return result.raw_text.strip()
+    options: dict[str, list[str]] = {key: [] for key in matches}
+    question = []
+    for line in result.lines:
+        left, top, _, height = line.bounds
+        middle = top + height / 2
+        candidates = []
+        for key, match in matches.items():
+            x, _ = match["top_left"]
+            width, button_height = match["size"]
+            if (
+                left >= x + width - 2
+                and abs(middle - match["center"][1]) <= button_height
+            ):
+                distance = (
+                    abs(middle - match["center"][1]) * 2 + left - x - width
+                )
+                candidates.append((distance, key))
+        candidates.sort()
+        if candidates and (
+            len(candidates) == 1 or candidates[0][0] < candidates[1][0]
+        ):
+            options[candidates[0][1]].append(line.text)
+        elif line.text.strip() not in matches:
+            question.append(line.text)
+    if any(not value for value in options.values()):
+        return result.raw_text.strip()
+    return "\n".join(
+        [
+            *question,
+            *(
+                f"{key}: {' '.join(lines)}"
+                for key, lines in sorted(options.items())
+            ),
+        ]
+    )

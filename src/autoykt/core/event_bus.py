@@ -1,72 +1,108 @@
-"""Lightweight async event bus using asyncio.Queue."""
+"""Asynchronous events used for observation, logging, and notifications."""
+
+from __future__ import annotations
 
 import asyncio
-from enum import Enum, auto
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine
-from datetime import datetime
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any
 
 
-class EventType(Enum):
-    """All event types flowing through the system."""
-    QUESTION_DETECTED = auto()   # 题目被检测到
-    ANSWER_READY = auto()        # 答案已生成
-    CLICK_DONE = auto()          # 点击完成，答题结束
-    ERROR = auto()               # 错误事件
+class EventType(str, Enum):
+    """Observable events emitted by the automation workflow."""
+
+    STATE_CHANGED = "state_changed"
+    TEMPLATE_DETECTED = "template_detected"
+    QUESTION_CAPTURED = "question_captured"
+    ANSWER_READY = "answer_ready"
+    ANSWER_REJECTED = "answer_rejected"
+    INTERACTION_COMPLETED = "interaction_completed"
+    SUBMISSION_VERIFIED = "submission_verified"
+    KNOWLEDGE_UPDATED = "knowledge_updated"
+    ERROR = "error"
+
+    # Compatibility name used by prototype integrations.
+    QUESTION_DETECTED = "question_captured"
+    CLICK_DONE = "interaction_completed"
 
 
-@dataclass                                                                      #生成数据类样板代码
+@dataclass(frozen=True)
 class Event:
-    """A single event with type, payload, and metadata."""
+    """One immutable workflow event."""
+
     type: EventType
-    payload: dict[str, Any] = field(default_factory=dict)                       #field＆defaultfactory
-    timestamp: datetime = field(default_factory=datetime.now)                   #对每一个新对象，给出新的字典和记录时间
+    profile_id: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
 
 
-# Subscriber type: async callable that takes an Event
-Subscriber = Callable[[Event], Coroutine[Any, Any, None]]
+Subscriber = Callable[[Event], Awaitable[None]]
 
 
 class EventBus:
-    """Async pub/sub event bus. Modules subscribe to event types."""
+    """Queue events without coupling workflow progress to observers."""
 
-    def __init__(self) -> None:                                                 #初始化
-        self._subscribers: dict[EventType, list[Subscriber]] = {}               #字典，四种不同事件的subscriber列表
-        self._queue: asyncio.Queue[Event] = asyncio.Queue()                     #事件队列
+    def __init__(self) -> None:
+        self._subscribers: dict[EventType, list[Subscriber]] = {}
+        self._queue: asyncio.Queue[Event | None] = asyncio.Queue()
         self._running = False
+        self._stopping = False
 
-    def subscribe(self, event_type: EventType, handler: Subscriber) -> None:    #注册订阅
-        """Register a handler for a specific event type."""
-        if event_type not in self._subscribers:                                 #如果此前没有订阅某种event，则新增该event的订阅列表
-            self._subscribers[event_type] = []
-        self._subscribers[event_type].append(handler)                           #向订阅列表加入subscriber
+    def subscribe(self, event_type: EventType, handler: Subscriber) -> None:
+        """Register an async handler for one event type."""
+        self._subscribers.setdefault(event_type, []).append(handler)
 
-    async def publish(self, event: Event) -> None:                              #向队列发布事件
-        """Publish an event to the bus."""
+    async def publish(self, event: Event) -> None:
+        """Place an event on the observer queue."""
         await self._queue.put(event)
 
-    async def start(self) -> None:                                              #启动自动运行
-        """Start the event dispatch loop."""
+    async def start(self) -> None:
+        """Dispatch queued events until ``stop`` is called."""
+        if self._running:
+            raise RuntimeError("event bus is already running")
         self._running = True
-        while self._running:                                                    #自动运行标志
-            try:
-                event = await asyncio.wait_for(self._queue.get(), timeout=1.0)  #从事件队列取一个事件，没有就1s后再来
-            except asyncio.TimeoutError:
-                continue
+        try:
+            while True:
+                event = await self._queue.get()
+                if event is None:
+                    if self._queue.empty():
+                        break
+                    self._queue.put_nowait(None)
+                    continue
+                await self._dispatch(event)
+        finally:
+            self._running = False
+            self._stopping = False
 
-            handlers = self._subscribers.get(event.type, [])                    #获取subscriber列表
-            for handler in handlers:
-                try:
-                    await handler(event)                                        #顺序执行handler
-                except Exception as e:                                          #错误拦截，升级成ERROR
-                    # Publish error event but avoid infinite loop
-                    if event.type != EventType.ERROR:
-                        err_event = Event(
-                            type=EventType.ERROR,
-                            payload={"source_event": event.type.name, "error": str(e)},
-                        )
-                        await self._queue.put(err_event)                        #将拦截到的错误置入队列，不等待handler
+    async def _dispatch(self, event: Event) -> None:
+        handlers = tuple(self._subscribers.get(event.type, ()))
+        if not handlers:
+            return
+        results = await asyncio.gather(
+            *(handler(event) for handler in handlers),
+            return_exceptions=True,
+        )
+        if event.type == EventType.ERROR:
+            return
+        for result in results:
+            if isinstance(result, BaseException):
+                await self._queue.put(
+                    Event(
+                        type=EventType.ERROR,
+                        profile_id=event.profile_id,
+                        payload={
+                            "source_event": event.type.value,
+                            "error": str(result),
+                        },
+                    )
+                )
 
-    def stop(self) -> None:                                                     #关闭标志位
-        """Stop the dispatch loop."""
-        self._running = False
+    def stop(self) -> None:
+        """Wake and stop the dispatch loop."""
+        if not self._stopping:
+            self._stopping = True
+            self._queue.put_nowait(None)

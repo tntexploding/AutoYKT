@@ -1,44 +1,49 @@
-"""Factory for creating notifier instances from config."""
+"""Create configured notification observers without embedded credentials."""
 
-import logging
+from __future__ import annotations
 
-from autoykt.core.config import AppConfig
+import os
+
+from autoykt.core.config import AppConfig, ConfigError
 from autoykt.core.event_bus import EventBus
 from autoykt.notifier.base import BaseNotifier
+from autoykt.notifier.qq_bot import QQNotifier
+from autoykt.notifier.telegram_bot import TelegramNotifier
 
-logger = logging.getLogger("auto_answer")
 
-
-def create_notifiers(config: AppConfig, event_bus: EventBus) -> list[BaseNotifier]:
-    """Create and return notifier instances based on config.enabled list."""
+def create_notifiers(
+    config: AppConfig,
+    event_bus: EventBus,
+) -> list[BaseNotifier]:
+    """Create enabled notifiers after resolving private environment values."""
     notifiers: list[BaseNotifier] = []
-
     for backend in config.notifier.enabled:
-        try:
-            if backend == "telegram":
-                from autoykt.notifier.telegram_bot import TelegramNotifier
-                n = TelegramNotifier(
+        if backend == "qq":
+            settings = config.notifier.qq
+            target = _required_environment(settings.target_env)
+            token = os.environ.get(settings.access_token_env, "")
+            notifiers.append(
+                QQNotifier(
                     event_bus=event_bus,
-                    token=config.notifier.telegram.token,
-                    chat_id=config.notifier.telegram.chat_id,
+                    onebot_url=settings.onebot_url,
+                    target_qq=target,
+                    access_token=token,
                 )
-                notifiers.append(n)
-
-            elif backend == "qq":
-                from autoykt.notifier.qq_bot import QQNotifier
-                n = QQNotifier(
+            )
+        elif backend == "telegram":
+            settings = config.notifier.telegram
+            notifiers.append(
+                TelegramNotifier(
                     event_bus=event_bus,
-                    onebot_url=config.notifier.qq.onebot_url,
-                    target_qq=config.notifier.qq.target_qq,
-                    access_token=config.notifier.qq.access_token,
+                    token=_required_environment(settings.token_env),
+                    chat_id=_required_environment(settings.chat_id_env),
                 )
-                notifiers.append(n)
-
-            else:
-                logger.warning(f"Unknown notifier backend: {backend}")
-
-        except Exception as e:
-            logger.error(f"Failed to create notifier '{backend}': {e}")
-
-    logger.info(f"Created {len(notifiers)} notifier(s): {[n.name for n in notifiers]}")
+            )
     return notifiers
+
+
+def _required_environment(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise ConfigError(f"required environment variable is missing: {name}")
+    return value

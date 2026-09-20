@@ -6,6 +6,10 @@ __pycache__/
 *.so
 .pytest_cache/
 .mypy_cache/
+.pylint.d/
+*.egg-info/
+build/
+dist/
 
 # Virtual environments
 .venv/
@@ -17,10 +21,21 @@ venv/
 
 # Runtime artifacts
 storage/
+/data/
+/logs/
+/screenshots/
+/templates/
+/assets/templates/
+*.db
+*.db-shm
+*.db-wal
 
 # Local config and secrets
-config.yaml
-.env
+/config*.yaml
+/config*.yml
+!/config.example.yaml
+.env*
+!.env.example
 commands.txt
 example.png
 example2.png

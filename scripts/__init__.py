@@ -1,9 +1,10 @@
-"""Utility tools: calibration, testing."""
+"""Source-checkout utility entry points."""
 
 import sys
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-SRC_DIR = ROOT_DIR / "src"
-if str(SRC_DIR) not in sys.path:
-	sys.path.insert(0, str(SRC_DIR))
+
+_ROOT_DIRECTORY = Path(__file__).resolve().parent.parent
+_SOURCE_DIRECTORY = _ROOT_DIRECTORY / "src"
+if str(_SOURCE_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(_SOURCE_DIRECTORY))
