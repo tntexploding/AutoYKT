@@ -1,7 +1,8 @@
-"""QQ notification backend using OneBot (Lagrange) HTTP API."""
+"""QQ private-message notifications through the OneBot HTTP API."""
+
+from __future__ import annotations
 
 import base64
-import logging
 from pathlib import Path
 
 import aiohttp
@@ -9,66 +10,70 @@ import aiohttp
 from autoykt.core.event_bus import EventBus
 from autoykt.notifier.base import BaseNotifier
 
-logger = logging.getLogger("auto_answer")
-
 
 class QQNotifier(BaseNotifier):
-    """Push notifications to a QQ account via OneBot HTTP API."""
+    """Send events to one QQ account through a local OneBot service."""
 
-    def __init__(self, event_bus: EventBus, onebot_url: str, target_qq: int | str, access_token: str = "") -> None:
+    def __init__(
+        self,
+        event_bus: EventBus,
+        onebot_url: str,
+        target_qq: str,
+        access_token: str = "",
+    ) -> None:
+        if not target_qq.isdigit():
+            raise ValueError("QQ target environment value must be numeric")
         super().__init__(event_bus)
         self._url = onebot_url.rstrip("/")
         self._target = int(target_qq)
         self._access_token = access_token
         self._session: aiohttp.ClientSession | None = None
-        logger.info(f"QQNotifier initialized, target={target_qq}, url={onebot_url}")
+
+    @property
+    def name(self) -> str:
+        return "QQ"
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
             headers = {}
             if self._access_token:
                 headers["Authorization"] = f"Bearer {self._access_token}"
-            self._session = aiohttp.ClientSession(headers=headers)
+            timeout = aiohttp.ClientTimeout(total=15)
+            self._session = aiohttp.ClientSession(
+                headers=headers,
+                timeout=timeout,
+            )
         return self._session
 
-    @property
-    def name(self) -> str:
-        return "QQ"
-
     async def send_text(self, text: str) -> None:
-        session = await self._get_session()
-        payload = {
-            "user_id": self._target,
-            "message": [{"type": "text", "data": {"text": text}}],
-        }
-        async with session.post(f"{self._url}/send_private_msg", json=payload) as resp:
-            result = await resp.json()
-            if result.get("retcode") != 0:
-                logger.warning(f"[QQ] send_text failed: {result}")
-            else:
-                logger.debug(f"[QQ] Sent text: {text[:60]}...")
+        await self._send_message([{"type": "text", "data": {"text": text}}])
 
     async def send_image(self, image_path: str, caption: str = "") -> None:
-        img_bytes = Path(image_path).read_bytes()
-        b64 = base64.b64encode(img_bytes).decode("utf-8")
-
-        message = []
+        image_data = base64.b64encode(Path(image_path).read_bytes()).decode(
+            "ascii"
+        )
+        message: list[dict[str, object]] = []
         if caption:
             message.append({"type": "text", "data": {"text": caption + "\n"}})
-        message.append({"type": "image", "data": {"file": f"base64://{b64}"}})
+        message.append(
+            {
+                "type": "image",
+                "data": {"file": f"base64://{image_data}"},
+            }
+        )
+        await self._send_message(message)
 
+    async def _send_message(self, message: list[dict[str, object]]) -> None:
         session = await self._get_session()
-        payload = {
-            "user_id": self._target,
-            "message": message,
-        }
-        async with session.post(f"{self._url}/send_private_msg", json=payload) as resp:
-            result = await resp.json()
+        payload = {"user_id": self._target, "message": message}
+        async with session.post(
+            f"{self._url}/send_private_msg", json=payload
+        ) as response:
+            response.raise_for_status()
+            result = await response.json()
             if result.get("retcode") != 0:
-                logger.warning(f"[QQ] send_image failed: {result}")
-            else:
-                logger.debug(f"[QQ] Sent image: {image_path}")
+                raise RuntimeError("OneBot rejected message")
 
     async def close(self) -> None:
-        if self._session and not self._session.closed:
+        if self._session is not None and not self._session.closed:
             await self._session.close()

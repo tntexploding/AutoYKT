@@ -1,0 +1,174 @@
+version: 2
+
+# Runtime defaults are intentionally non-destructive. Enable and calibrate a
+# page profile before running. `session` enables input for that process; use
+# --dry-run to preview. `run` respects both flags. See docs/deployment.md.
+runtime:
+  active_profiles: []
+  poll_interval_seconds: 0.5
+  dry_run: true
+
+# Relative paths are resolved next to the private config file, not the repo.
+storage:
+  data_dir: data
+  log_dir: logs
+  screenshot_dir: screenshots
+
+answering:
+  providers:
+    - name: deepseek_flash
+      base_url: https://api.deepseek.com
+      api_key_env: DEEPSEEK_API_KEY
+      models: [deepseek-v4-flash]
+      input_mode: text
+      timeout_seconds: 20
+      max_output_tokens: 8192
+      request_json_object: true
+      thinking: disabled  # Keep timed Flash responses short.
+      reasoning_effort: null
+  # Start three independent samples; add up to two if voting is inconclusive.
+  minimum_responses: 2
+  minimum_agreement: 2  # Winning vote count, not a percentage.
+  minimum_confidence: 0.6
+  maximum_parallel_requests: 3
+  initial_rounds: 3
+  maximum_rounds: 5  # Per configured model, within the question deadline.
+  auto_apply: false
+  prompt_template: null
+
+knowledge:
+  enabled: false
+  database_path: data/knowledge.db
+  question_ocr_enabled: true
+  maximum_results: 4
+  minimum_score: 0.08
+  maximum_context_characters: 5000
+  chunk_size_characters: 800
+  chunk_overlap_characters: 100
+
+pages:
+  - id: example_yuketang
+    display_name: Example Yuketang profile
+    course_id: example_course
+    enabled: false
+    monitor_index: 1
+
+    # For formal Windows operation, configure these in the PRIVATE config.
+    # Use `autoykt windows` to obtain the selector and calibrated client size.
+    # target_window:
+    #   title_pattern: '<unique regular expression for the quiz window>'
+    #   class_name: '<window class from autoykt windows>'
+    #   client_size: [1280, 800]  # Replace with the actual dimensions.
+    #   background_monitoring: false  # Read a fully visible background window.
+    #   focus_point: null  # Optional calibrated neutral client-relative point.
+    target_window: null
+    # Calibrate with g, or configure {path, region, threshold} privately.
+    # A bound live run requires this page identity and explicit success templates.
+    page_guard: null
+
+    # Every region is [x, y, width, height], relative to monitor_index,
+    # or to the window CLIENT area when target_window is configured.
+    regions:
+      detection: [0, 0, 100, 100]
+      question: [0, 0, 100, 100]
+      answers: [0, 0, 100, 100]
+      verification: [0, 0, 100, 100]
+      rearm: [0, 0, 100, 100]
+
+    # Multiple visual styles can route to answer or notification workflows.
+    triggers:
+      - name: single_choice
+        path: templates/question.png
+        threshold: 0.85
+        consecutive_hits: 3
+        action: answer
+        question_type: single  # Use multiple for the multi-choice title template.
+
+    # Optional private regression images. Empty means no screenshot validation.
+    # See docs/configuration.md for labeled active/completed/expired samples.
+    calibration_samples: []
+
+    answer_style:
+      option_match_threshold: 0.85
+      # Match letter shapes across background colors at the calibrated size.
+      match_grayscale: false
+      # Calibrate colors with b/u and full size with c; see docs/deployment.md.
+      # For central-letter templates, include button_size: [width, height].
+      # Unknown background colors are reported with selected=null.
+      button_colors: null
+      selection_timeout_seconds: 2
+      option_templates:
+        A: templates/options/A.png
+        B: templates/options/B.png
+        C: templates/options/C.png
+        D: templates/options/D.png
+      # Used only when an option template cannot be located.
+      fallback_positions: {}
+      fallback_coordinate_space: monitor  # Use window for bound-window points.
+
+    # Optional click needed to open or focus a question.
+    entry_target: null
+
+    # Formal operation requires the real submit button (point OR region).
+    submit_target: null
+    submit_on_select: false  # Only for confirmed single-choice auto-submit pages.
+
+    question_ready:
+      delay_seconds: 0.3
+      timeout_seconds: 3
+      stable_frames: 2
+      maximum_change_ratio: 0.01
+
+    # Formal operation requires explicit completion feedback templates.
+    verification:
+      success_templates: []
+      failure_templates: []
+      require_success_template: false  # Bound-window live runs always require it.
+      timeout_seconds: 5
+      poll_interval_seconds: 0.25
+      stable_hits: 2
+      minimum_change_ratio: 0.02
+
+    # All stages share total_seconds. Text-only models require usable OCR.
+    question_budget:
+      total_seconds: 45
+      context_seconds: 5
+      answer_seconds: 25
+
+    # Only transient model failures are retried, within the same time budget.
+    recovery:
+      maximum_attempts: 2
+      delay_seconds: 1
+
+    # Configure real state images and controls privately after calibration.
+    # after_submit entries: {name, when: {path, region, threshold},
+    #                        target: {point, coordinate_space}, stable_hits}
+    # Each entry can click once, only after explicit success verification.
+    page_flow:
+      before_question: []  # Match a new-question notice, then click its entry.
+      after_submit: []
+      loading: []  # Regional templates: [{path, region, threshold}].
+      manual: []   # Expired question/session or another state needing help.
+      finished: [] # Class ended; stop after two observations.
+      transition_timeout_seconds: 10
+
+    # The completed question must change or disappear before retriggering.
+    rearm:
+      timeout_seconds: 30
+      stable_hits: 2
+      # Ignore recognized button colors; calibrate against consecutive pages.
+      minimum_change_ratio: 0.02
+
+# Personal IDs and tokens are read only from the named environment variables.
+notifier:
+  enabled: []
+  qq:
+    onebot_url: http://127.0.0.1:4096
+    target_env: AUTOYKT_QQ_TARGET
+    access_token_env: AUTOYKT_ONEBOT_ACCESS_TOKEN
+  telegram:
+    token_env: AUTOYKT_TELEGRAM_TOKEN
+    chat_id_env: AUTOYKT_TELEGRAM_CHAT_ID
+
+logging:
+  level: INFO

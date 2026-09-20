@@ -2,7 +2,16 @@
   "include": [
     "."
   ],
+  "exclude": [
+    ".venv",
+    "build",
+    "dist"
+  ],
   "extraPaths": [
     "src"
-  ]
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic"
 }
