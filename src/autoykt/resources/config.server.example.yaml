@@ -1,0 +1,78 @@
+# Headless service. Paths are relative to this private configuration file.
+version: 1
+data_dir: data
+platform:
+  base_url: https://changjiang.yuketang.cn
+  session_file: data/session.json
+  poll_seconds: 15
+  reconnect_seconds: 3
+  request_timeout: 10
+  classroom_ids: [] # Empty: all currently active classrooms for this account.
+  auto_login: true # Save a local Web login QR when the session expires.
+  login_retry_seconds: 5
+  handshake_timeout: 10
+  metadata_wait_seconds: 30
+  metadata_retry_seconds: 1
+courseware:
+  enabled: true # Discover all visible decks through lesson_info_v2.
+  download_images: true # Save original pages; incomplete downloads do not block questions.
+  refresh_seconds: 60
+control:
+  enabled: false # Optional local control API. Use a nonempty AUTOYKT_WEBHOOK_TOKEN.
+  port: 18767 # Always bound to 127.0.0.1; never publish this port.
+  token_env: AUTOYKT_WEBHOOK_TOKEN
+answering:
+  mode: notify # notify: remind only; assist: solve/cache only; auto: also submit.
+  timeout_seconds: 18
+  submit_reserve_seconds: 3
+  fallback: notify # Optional: first_option (choice/vote/judgment only).
+  precompute: true
+  previous_slides: 3
+  context_characters: 12000
+  maximum_parallel: 2
+  providers:
+    - name: primary
+      base_url: https://api.deepseek.com
+      api_key_env: DEEPSEEK_API_KEY
+      models: [deepseek-flash]
+      input_mode: vision
+      timeout_seconds: 15
+      max_output_tokens: 2048
+      request_json_object: true
+      thinking: disabled
+webhook:
+  url: null # e.g. http://host.docker.internal:8080/autoykt/events
+  token_env: AUTOYKT_WEBHOOK_TOKEN
+  timeout_seconds: 5
+  attempts: 3
+  queue_size: 1000
+  retention_seconds: 300 # Urgent events retry until expiry; QR honors its expiry.
+  inline_question_images: true # Supplement details with original image base64.
+  inline_image_max_bytes: 2000000
+  events: # Optional event forwarding.
+    - notification_test
+    - service_started
+    - service_stopped
+    - login_required
+    - login_qr
+    - login_succeeded
+    - login_retry
+    - classroom_entry_result
+    - lesson_connected
+    - lesson_disconnected
+    - lesson_finished
+    - question_detected
+    - question_ready
+    - question_unavailable
+    - question_image
+    - question_image_unavailable
+    - answer_ready
+    - answer_failed
+    - submission_result
+    - submission_verified
+    - submission_unresolved
+    - already_submitted
+    - courseware_summary
+    - preparation_progress
+    - submission_skipped
+    - entry_mode_unavailable

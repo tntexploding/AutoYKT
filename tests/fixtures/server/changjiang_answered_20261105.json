@@ -1,0 +1,397 @@
+{
+  "provenance": {
+    "source": "Synthetic protocol fixture",
+    "scope": "Field names and response structure for Web classroom tests"
+  },
+  "response": {
+    "code": 0,
+    "msg": "OK",
+    "data": {
+      "width": 720,
+      "height": 405,
+      "version": "Synthetic sample text",
+      "slides": [
+        {
+          "id": "900001",
+          "index": 18,
+          "cover": "https://example.invalid/question-image.jpg",
+          "coverAlt": "https://example.invalid/question-image.jpg",
+          "thumbnail": "https://example.invalid/question-image.jpg",
+          "shapes": [
+            {
+              "Text": "Synthetic sample text",
+              "Fill": {
+                "BackColor": "Synthetic sample text",
+                "Transparency": 0.0,
+                "Visble": false
+              },
+              "Line": {
+                "DashStyle": "Synthetic sample text",
+                "BackColor": "Synthetic sample text",
+                "Visble": false,
+                "Weight": 0.0
+              },
+              "Width": 0.0,
+              "Height": 0.0,
+              "Left": 0.0,
+              "Top": 0.0,
+              "ZOrderPosition": 0,
+              "Rotation": 0.0,
+              "PPTShapeId": 900002,
+              "PPTShapeType": 0
+            },
+            {
+              "Text": "Synthetic sample text",
+              "Fill": {
+                "BackColor": "Synthetic sample text",
+                "Transparency": 0.0,
+                "Visble": false
+              },
+              "Line": {
+                "DashStyle": "Synthetic sample text",
+                "BackColor": "Synthetic sample text",
+                "Visble": false,
+                "Weight": 0.0
+              },
+              "Width": 0.0,
+              "Height": 0.0,
+              "Left": 0.0,
+              "Top": 0.0,
+              "ZOrderPosition": 0,
+              "Rotation": 0.0,
+              "PPTShapeId": 900003,
+              "PPTShapeType": 0
+            },
+            {
+              "Text": "Synthetic sample text",
+              "Fill": {
+                "BackColor": "Synthetic sample text",
+                "Transparency": 0.0,
+                "Visble": false
+              },
+              "Line": {
+                "DashStyle": "Synthetic sample text",
+                "BackColor": "Synthetic sample text",
+                "Visble": false,
+                "Weight": 0.0
+              },
+              "Width": 0.0,
+              "Height": 0.0,
+              "Left": 0.0,
+              "Top": 0.0,
+              "ZOrderPosition": 0,
+              "Rotation": 0.0,
+              "PPTShapeId": 900004,
+              "PPTShapeType": 0
+            },
+            {
+              "Text": "Synthetic sample text",
+              "Fill": {
+                "BackColor": "Synthetic sample text",
+                "Transparency": 0.0,
+                "Visble": false
+              },
+              "Line": {
+                "DashStyle": "Synthetic sample text",
+                "BackColor": "Synthetic sample text",
+                "Visble": false,
+                "Weight": 0.0
+              },
+              "Width": 0.0,
+              "Height": 0.0,
+              "Left": 0.0,
+              "Top": 0.0,
+              "ZOrderPosition": 0,
+              "Rotation": 0.0,
+              "PPTShapeId": 900005,
+              "PPTShapeType": 0
+            },
+            {
+              "Text": "Synthetic sample text",
+              "Fill": {
+                "BackColor": "Synthetic sample text",
+                "Transparency": 0.0,
+                "Visble": false
+              },
+              "Line": {
+                "DashStyle": "Synthetic sample text",
+                "BackColor": "Synthetic sample text",
+                "Visble": false,
+                "Weight": 0.0
+              },
+              "Width": 0.0,
+              "Height": 0.0,
+              "Left": 0.0,
+              "Top": 0.0,
+              "ZOrderPosition": 0,
+              "Rotation": 0.0,
+              "PPTShapeId": 900006,
+              "PPTShapeType": 0
+            }
+          ],
+          "note": "",
+          "problem": {
+            "problemId": "900001",
+            "problemType": 1,
+            "body": "Synthetic sample text",
+            "score": 0,
+            "remark": "",
+            "answers": [],
+            "sendTime": 1700000000000,
+            "limit": 216,
+            "options": [
+              {
+                "key": "A",
+                "value": "Synthetic sample text"
+              },
+              {
+                "key": "B",
+                "value": "Synthetic sample text"
+              },
+              {
+                "key": "C",
+                "value": "Synthetic sample text"
+              },
+              {
+                "key": "D",
+                "value": "Synthetic sample text"
+              }
+            ],
+            "submit": {
+              "width": 91.12504,
+              "height": 24.37504,
+              "top": 0.0,
+              "left": 0.0
+            },
+            "bullets": [
+              {
+                "width": 30.25,
+                "height": 30.37496,
+                "top": 0.0,
+                "label": "Synthetic sample text",
+                "left": 0.0
+              },
+              {
+                "width": 30.25,
+                "height": 30.37504,
+                "top": 0.0,
+                "label": "Synthetic sample text",
+                "left": 0.0
+              },
+              {
+                "width": 30.25,
+                "height": 30.37496,
+                "top": 0.0,
+                "label": "Synthetic sample text",
+                "left": 0.0
+              },
+              {
+                "width": 30.25,
+                "height": 30.37504,
+                "top": 0.0,
+                "label": "Synthetic sample text",
+                "left": 0.0
+              }
+            ],
+            "remarkRich": {},
+            "hasRemark": false,
+            "version": 4,
+            "result": [
+              "B"
+            ]
+          }
+        },
+        {
+          "id": "900007",
+          "index": 38,
+          "cover": "https://example.invalid/question-image.jpg",
+          "coverAlt": "https://example.invalid/question-image.jpg",
+          "thumbnail": "https://example.invalid/question-image.jpg",
+          "shapes": [
+            {
+              "Text": "Synthetic sample text",
+              "Fill": {
+                "BackColor": "Synthetic sample text",
+                "Transparency": 0.0,
+                "Visble": false
+              },
+              "Line": {
+                "DashStyle": "Synthetic sample text",
+                "BackColor": "Synthetic sample text",
+                "Visble": false,
+                "Weight": 0.0
+              },
+              "Width": 0.0,
+              "Height": 0.0,
+              "Left": 0.0,
+              "Top": 0.0,
+              "ZOrderPosition": 0,
+              "Rotation": 0.0,
+              "PPTShapeId": 900008,
+              "PPTShapeType": 0
+            },
+            {
+              "Text": "Synthetic sample text",
+              "Fill": {
+                "BackColor": "Synthetic sample text",
+                "Transparency": 0.0,
+                "Visble": false
+              },
+              "Line": {
+                "DashStyle": "Synthetic sample text",
+                "BackColor": "Synthetic sample text",
+                "Visble": false,
+                "Weight": 0.0
+              },
+              "Width": 0.0,
+              "Height": 0.0,
+              "Left": 0.0,
+              "Top": 0.0,
+              "ZOrderPosition": 0,
+              "Rotation": 0.0,
+              "PPTShapeId": 900009,
+              "PPTShapeType": 0
+            },
+            {
+              "Text": "Synthetic sample text",
+              "Fill": {
+                "BackColor": "Synthetic sample text",
+                "Transparency": 0.0,
+                "Visble": false
+              },
+              "Line": {
+                "DashStyle": "Synthetic sample text",
+                "BackColor": "Synthetic sample text",
+                "Visble": false,
+                "Weight": 0.0
+              },
+              "Width": 0.0,
+              "Height": 0.0,
+              "Left": 0.0,
+              "Top": 0.0,
+              "ZOrderPosition": 0,
+              "Rotation": 0.0,
+              "PPTShapeId": 900010,
+              "PPTShapeType": 0
+            },
+            {
+              "Text": "Synthetic sample text",
+              "Fill": {
+                "BackColor": "Synthetic sample text",
+                "Transparency": 0.0,
+                "Visble": false
+              },
+              "Line": {
+                "DashStyle": "Synthetic sample text",
+                "BackColor": "Synthetic sample text",
+                "Visble": false,
+                "Weight": 0.0
+              },
+              "Width": 0.0,
+              "Height": 0.0,
+              "Left": 0.0,
+              "Top": 0.0,
+              "ZOrderPosition": 0,
+              "Rotation": 0.0,
+              "PPTShapeId": 900011,
+              "PPTShapeType": 0
+            },
+            {
+              "Text": "Synthetic sample text",
+              "Fill": {
+                "BackColor": "Synthetic sample text",
+                "Transparency": 0.0,
+                "Visble": false
+              },
+              "Line": {
+                "DashStyle": "Synthetic sample text",
+                "BackColor": "Synthetic sample text",
+                "Visble": false,
+                "Weight": 0.0
+              },
+              "Width": 0.0,
+              "Height": 0.0,
+              "Left": 0.0,
+              "Top": 0.0,
+              "ZOrderPosition": 0,
+              "Rotation": 0.0,
+              "PPTShapeId": 900012,
+              "PPTShapeType": 0
+            }
+          ],
+          "note": "",
+          "problem": {
+            "problemId": "900007",
+            "problemType": 1,
+            "body": "Synthetic sample text",
+            "score": 0,
+            "remark": "",
+            "answers": [],
+            "sendTime": 1700000000000,
+            "limit": 60,
+            "options": [
+              {
+                "key": "A",
+                "value": "Synthetic sample text"
+              },
+              {
+                "key": "B",
+                "value": "Synthetic sample text"
+              },
+              {
+                "key": "C",
+                "value": "Synthetic sample text"
+              },
+              {
+                "key": "D",
+                "value": "Synthetic sample text"
+              }
+            ],
+            "submit": {
+              "width": 91.12504,
+              "height": 24.37504,
+              "top": 0.0,
+              "left": 0.0
+            },
+            "bullets": [
+              {
+                "width": 30.25,
+                "height": 30.37496,
+                "top": 0.0,
+                "label": "Synthetic sample text",
+                "left": 0.0
+              },
+              {
+                "width": 30.25,
+                "height": 30.37504,
+                "top": 0.0,
+                "label": "Synthetic sample text",
+                "left": 0.0
+              },
+              {
+                "width": 30.25,
+                "height": 30.37496,
+                "top": 0.0,
+                "label": "Synthetic sample text",
+                "left": 0.0
+              },
+              {
+                "width": 30.25,
+                "height": 30.37504,
+                "top": 0.0,
+                "label": "Synthetic sample text",
+                "left": 0.0
+              }
+            ],
+            "remarkRich": {},
+            "hasRemark": false,
+            "version": 4,
+            "result": [
+              "A"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

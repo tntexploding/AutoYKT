@@ -1,5 +1,19 @@
 # AutoYKT
 
+AutoYKT 的独立答题服务使用雨课堂 Web 会话，通过 HTTP 和 WebSocket 接收题目。它保存可见课件和备答结果，发题后复用缓存或调用模型，在自动模式下提交并回读。服务可直接通过 Python 运行，也可使用 Linux / Docker。
+
+```sh
+python -m pip install .
+python -m autoykt.server init
+# 编辑 config.server.yaml，配置站点、模型和答题模式。
+python -m autoykt.server login
+python -m autoykt.server run
+```
+
+默认模式为 `notify`。配置模型后，可选 `assist` 生成建议或 `auto` 自动提交。状态、题目和提交回执写入本地数据目录。Windows 可通过 `start-server.cmd` 启动，首次安装和扫码步骤见 [Windows 启动](docs/server.md#windows-启动)。Docker 和课件导出方法见 [独立答题服务](docs/server.md)。
+
+## Windows 桌面视觉模式
+
 AutoYKT 是运行在 Windows 可见桌面上的课堂答题工具：识别新题或新题提示，截取题目，用本地 OCR 取得题干和选项，调用 Flash 多次采样，定位字母按钮，选择、提交并检查平台的完成反馈，然后等待下一题。
 
 **首次使用需要按自己的正式页面标定一次；完成后，日常启动只需 `start-class.cmd`，默认运行两小时。** 程序使用本机截图和鼠标，不依赖 ChatGPT / Codex / Edge 连接插件，也不需要浏览器调试端口。
@@ -17,7 +31,7 @@ git clone https://github.com/tntexploding/AutoYKT.git
 cd AutoYKT
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip install -e '.[desktop]'
 .\.venv\Scripts\python.exe -m autoykt init
 ```
 
@@ -97,7 +111,7 @@ py -3.12 -m venv .venv
 
 ```powershell
 git pull --ff-only
-.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip install -e '.[desktop]'
 .\start-class.cmd --check
 ```
 

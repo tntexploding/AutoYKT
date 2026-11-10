@@ -1,0 +1,61 @@
+{
+  "provenance": {
+    "source": "Synthetic protocol fixture",
+    "scope": "Field names and response structure for Web classroom tests"
+  },
+  "lesson_id": "lesson-1",
+  "account_response": {
+    "code": 0,
+    "msg": "fixture",
+    "data": {
+      "id": "account-user",
+      "name": "Fixture Student"
+    }
+  },
+  "checkin_request": {
+    "source": 5,
+    "lessonId": "lesson-1"
+  },
+  "checkin_response": {
+    "code": 0,
+    "msg": "fixture",
+    "data": {
+      "role": 5,
+      "lessonId": "lesson-1",
+      "lessonToken": "ws-auth",
+      "identityId": "classroom-identity"
+    }
+  },
+  "checkin_set_auth": "lesson-token",
+  "sent_hello": {
+    "op": "hello",
+    "userid": "classroom-identity",
+    "role": "student",
+    "auth": "ws-auth",
+    "lessonid": "lesson-1"
+  },
+  "received_hello": {
+    "op": "hello",
+    "lessonid": "lesson-1",
+    "livestatus": 0,
+    "livevoice": 0,
+    "addinversion": -1,
+    "interactive": false,
+    "danmu": false,
+    "isReply": true,
+    "timeline": [
+      {
+        "type": "event",
+        "show": true,
+        "title": "Fixture lesson started",
+        "code": "fixture-invitation",
+        "dt": 1700000000000
+      }
+    ]
+  },
+  "received_notification": {
+    "op": "notification",
+    "notifications": [],
+    "isReply": true
+  }
+}

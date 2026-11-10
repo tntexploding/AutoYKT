@@ -1,0 +1,19 @@
+services:
+  autoykt:
+    build: .
+    image: autoykt:server
+    init: true
+    restart: unless-stopped
+    environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AUTOYKT_WEBHOOK_TOKEN: ${AUTOYKT_WEBHOOK_TOKEN:-}
+    volumes:
+      - ./config.server.yaml:/config/server.yaml:ro
+      - autoykt_data:/data
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    stop_grace_period: 15s
+
+volumes:
+  autoykt_data:
