@@ -1,4 +1,4 @@
-"""Local course knowledge ingestion and retrieval."""
+"""Local course knowledge storage and retrieval."""
 
 from autoykt.knowledge.store import KnowledgeMatch, KnowledgeStore
 

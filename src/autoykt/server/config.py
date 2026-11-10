@@ -1,4 +1,4 @@
-"""Configuration for the Linux/Docker service."""
+"""Configuration for the Rain Classroom Web answer service."""
 
 from __future__ import annotations
 
@@ -153,7 +153,7 @@ class DiagnosticsConfig(ConfigModel):
 
 
 class ServerConfig(ConfigModel):
-    """Standalone schema, independent of visual page calibration."""
+    """Configuration for the Web answer service."""
 
     version: Literal[1] = 1
     data_dir: str = "data"
@@ -179,7 +179,7 @@ class ServerConfig(ConfigModel):
 def load_server_config(
     path: str | Path, *, schema: type[ServerConfig] = ServerConfig
 ) -> ServerConfig:
-    """Load without desktop dependencies or environment mutation."""
+    """Load a private YAML configuration with paths relative to its directory."""
     source = Path(path).expanduser().resolve()
     config = schema.model_validate(
         yaml.safe_load(source.read_text(encoding="utf-8"))

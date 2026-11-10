@@ -1,1 +1,1 @@
-"""Headless Rain Classroom protocol service; no desktop imports."""
+"""Rain Classroom Web answer service."""

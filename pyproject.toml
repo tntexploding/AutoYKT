@@ -11,25 +11,12 @@ requires-python = ">=3.10,<3.15"
 license = {file = "LICENSE"}
 dependencies = [
   "aiohttp>=3.9,<4",
-  "jinja2>=3.1,<4",
   "openai>=1.30,<3",
-  "Pillow>=10.0,<13",
   "pydantic>=2.5,<3",
-  "pypdf>=5,<7",
-  "python-docx>=1.1,<2",
-  "python-pptx>=1.0,<2",
   "pyyaml>=6,<7",
 ]
 
 [project.optional-dependencies]
-desktop = [
-  "mss>=9.0,<11",
-  "numpy>=1.26,<3",
-  "opencv-python>=4.9,<5",
-  "pyautogui>=0.9,<1",
-  "python-telegram-bot>=21,<23",
-  "rapidocr-onnxruntime>=1.3,<2",
-]
 dev = [
   "pyink>=24.3,<26",
   "pylint>=3.2,<5",
@@ -37,7 +24,7 @@ dev = [
 ]
 
 [project.scripts]
-autoykt = "autoykt.cli:main"
+autoykt = "autoykt.server.cli:main"
 autoykt-server = "autoykt.server.cli:main"
 
 [tool.setuptools.packages.find]

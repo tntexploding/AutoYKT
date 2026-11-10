@@ -4,6 +4,7 @@
   ],
   "exclude": [
     ".venv",
+    ".venv-server",
     "build",
     "dist"
   ],

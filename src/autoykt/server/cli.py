@@ -1,4 +1,4 @@
-"""Standalone CLI that never imports screen capture or desktop automation."""
+"""Command line for the Rain Classroom Web answer service."""
 
 from __future__ import annotations
 

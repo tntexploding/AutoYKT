@@ -1,7 +1,6 @@
 .git
 .venv
 .venv-server
-.venv-server
 .codex
 .agents
 __pycache__
@@ -14,7 +13,6 @@ integrations
 app-session.json
 native-app
 storage
-export
 export
 data
 logs

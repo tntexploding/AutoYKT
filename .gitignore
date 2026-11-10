@@ -37,11 +37,11 @@ storage/
 
 # Local config and secrets
 /private/
+/integrations/
 /app-session.json
 /native-app/
 /config*.yaml
 /config*.yml
-!/config.example.yaml
 !/config.server.example.yaml
 .env*
 !.env.example
