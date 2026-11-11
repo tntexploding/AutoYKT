@@ -1,4 +1,4 @@
-"""Persistent runtime choices and a private HTTP interface for the Bot worker."""
+"""Persistent runtime choices and authenticated loopback control."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ class RuntimeSettings:
             config.answering.precompute = self.saved["precompute"]
 
     def save(self, **changes):
-        if "mode" in changes or "paused" in changes:
+        if changes.keys() & {"mode", "paused", "classroom_pause"}:
             self.generation += 1
         self.saved.update(changes)
         self.paused = bool(self.saved.get("paused", False))
@@ -187,16 +187,30 @@ class ControlServer:
                 "ok": True,
                 "message": "已暂停后续自动提交；题目提醒和 AI 建议继续。已经发出的请求等待回执。",
             }
+        if action == "stop_classroom":
+            await service.pause_classroom()
+            return {
+                "ok": True,
+                "message": "已停止课堂监听、抓题、备答和后续提交。已发出的请求以平台作答记录为准。",
+            }
+        if action == "resume_classroom":
+            service.resume_classroom()
+            return {
+                "ok": True,
+                "message": "已恢复课堂任务，将在下次发现时连接。",
+            }
         if action == "use_web":
             await service.restore_entry("web")
             return {
                 "ok": True,
                 "entry_mode": "web",
-                "message": "已恢复正常 Web 入口。",
+                "message": "已切换为 Web 入口。",
             }
         states = [state for state in service.states.values() if not state.ended]
         if action not in {"refresh", "prepare"}:
             raise ValueError("未知控制指令。")
+        if not service.classroom_available:
+            raise ValueError("课堂任务当前已停止。")
         if not states:
             return {
                 "ok": False,
@@ -230,6 +244,7 @@ class ControlServer:
             "running": "运行中",
             "degraded": "部分异常",
             "reconnecting": "重连中",
+            "entry_refused": "课堂发现被拒绝",
             "login_required": "等待微信登录",
             "stopped": "已停止",
         }
@@ -247,12 +262,21 @@ class ControlServer:
             "disconnected": "已断开，等待恢复",
             "entry_refused": "进班被拒绝",
             "login_required": "等待微信登录",
+            "paused": "已停止",
+            "expired": "已到截止时间",
+        }
+        phases = {
+            "listening": "监听中",
+            "paused": "已停止",
+            "expired": "已到截止时间",
+            "ended": "课堂已结束",
         }
         lines = [
             "模式："
             + MODE_NAMES[self.service.config.answering.mode]
             + ("（自动提交已暂停）" if self.service.runtime.paused else ""),
             "服务：" + statuses.get(snapshot["status"], "待核对"),
+            "课堂任务 " + phases[snapshot["classroom_phase"]],
             "入口：" + snapshot["entry_mode"],
         ]
         for state in snapshot["classrooms"]:
@@ -265,6 +289,9 @@ class ControlServer:
                     f"提取：{extraction.get(state['extraction'], '待核对')}；未发布内容可见性未知",
                 ]
             )
-        if not snapshot["classrooms"]:
+        if (
+            not snapshot["classrooms"]
+            and snapshot["classroom_phase"] == "listening"
+        ):
             lines.append("等待上课课堂。")
         return "\n".join(lines)

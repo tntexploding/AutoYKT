@@ -126,6 +126,7 @@ class ClassroomService:
         self.extraction_reports: dict[str, tuple] = {}
         self.warmer: asyncio.Task | None = None
         self.stop = asyncio.Event()
+        self.classroom_stop_lock = asyncio.Lock()
         self.login = LoginRecovery(
             config, client, events, self._login_succeeded
         )
@@ -134,6 +135,34 @@ class ClassroomService:
         self.deadlines: dict[tuple[str, str], float | None] = {}
         self.publications: dict[tuple[str, str], dict] = {}
         self.closed_questions: set[tuple[str, str]] = set()
+
+    @property
+    def classroom_scope(self) -> str:
+        return "web"
+
+    @property
+    def classroom_phase(self) -> str:
+        if self.runtime.saved.get("classroom_pause") == self.classroom_scope:
+            return "paused"
+        return "listening"
+
+    @property
+    def classroom_available(self) -> bool:
+        return not self.stop.is_set() and self.classroom_phase == "listening"
+
+    async def pause_classroom(self):
+        self.runtime.save(classroom_pause=self.classroom_scope)
+        await self._stop_classroom_work("paused")
+        await self.events.emit(
+            "classroom_task_stopped",
+            payload={"lesson_ids": list(self.states)},
+        )
+
+    def resume_classroom(self):
+        self.runtime.save(classroom_pause=None)
+
+    async def _discovery_ready(self):
+        return not self.discovery_blocked
 
     async def run(self):
         """Discover active lessons and keep a local heartbeat/status file."""
@@ -146,11 +175,15 @@ class ClassroomService:
         )
         login_reported = False
         while not self.stop.is_set():
-            if self.discovery_blocked:
-                self._write_status("entry_refused")
+            if not self.classroom_available:
+                self._write_status("running")
                 await self._pause()
                 continue
             try:
+                if not await self._discovery_ready():
+                    self._write_status("entry_refused")
+                    await self._pause()
+                    continue
                 self.client.reload_session()
                 if not self.client.state.get("cookie"):
                     raise LoginRequired("no session cookie")
@@ -172,6 +205,8 @@ class ClassroomService:
                         ],
                     },
                 )
+                if not self.classroom_available:
+                    continue
                 login_reported = False
                 allowed = self.config.platform.classroom_ids
                 for item in lessons:
@@ -199,6 +234,8 @@ class ClassroomService:
                         self.schedule_courseware(state)
                 self._write_status("running")
             except LoginRequired as error:
+                if not self.classroom_available:
+                    continue
                 if await self._reject_discovery_login(error):
                     self._write_status("entry_refused")
                     await self._pause()
@@ -289,8 +326,17 @@ class ClassroomService:
         webhook = self.events.delivery_status()
         if self.login.active:
             status = "login_required"
+        elif (
+            status == "running"
+            and self.classroom_available
+            and self.discovery_blocked
+        ):
+            status = "entry_refused"
         elif status == "running" and (
-            any(state.connection != "connected" for state in active)
+            (
+                self.classroom_available
+                and any(state.connection != "connected" for state in active)
+            )
             or (
                 webhook["configured"]
                 and (not webhook["worker_alive"] or webhook["last_error"])
@@ -305,6 +351,7 @@ class ClassroomService:
             ],
             "pending_answers": len(self.jobs),
             "mode": self.config.answering.mode,
+            "classroom_phase": self.classroom_phase,
             "entry_mode": self.client.entry_mode,
             "login_kind": self.client.state.get("login_kind", "web_login"),
             "submission_paused": self.runtime.paused,
@@ -336,10 +383,12 @@ class ClassroomService:
 
     async def listen(self, state: LessonState):
         """Reconnect the classroom stream after transport loss."""
-        while not self.stop.is_set() and not state.ended:
+        while self.classroom_available and not state.ended:
             state.connection = "connecting"
             try:
                 identity = await self.client.checkin(state.lesson_id)
+                if not self.classroom_available:
+                    return
                 await self._entry_result(state, 0)
                 await self._classroom_stream(state, identity)
             except ClassroomEntryRejected as error:
@@ -370,7 +419,7 @@ class ClassroomService:
             finally:
                 if not state.ended and state.connection == "connected":
                     state.connection = "disconnected"
-                    if not self.stop.is_set() and not self.login.active:
+                    if self.classroom_available and not self.login.active:
                         await self.events.emit(
                             "lesson_disconnected",
                             lesson_id=state.lesson_id,
@@ -397,6 +446,8 @@ class ClassroomService:
         self.client.select_entry(mode)
         self.discovery_blocked = False
         self.runtime.save(entry_mode=mode)
+        if not self.classroom_available:
+            return
         reconnect = [
             state
             for state in self.states.values()
@@ -417,9 +468,10 @@ class ClassroomService:
         )
         for state in reconnect:
             state.entry_blocked = False
-            self.listeners[state.lesson_id] = asyncio.create_task(
-                self.listen(state)
-            )
+            if self.classroom_available:
+                self.listeners[state.lesson_id] = asyncio.create_task(
+                    self.listen(state)
+                )
 
     async def _entry_result(self, state, code):
         if state.entry_code == code:
@@ -539,6 +591,8 @@ class ClassroomService:
     # pylint: disable-next=too-many-branches
     async def handle_message(self, state: LessonState, data: dict):
         """Emit a reminder before any metadata fetch, OCR or model call."""
+        if not self.classroom_available:
+            return
         operation = data.get("op")
         if operation == "lessonfinished":
             state.ended = True
@@ -687,7 +741,7 @@ class ClassroomService:
         if (
             (not self.config.courseware.enabled and not force)
             or state.ended
-            or self.stop.is_set()
+            or not self.classroom_available
         ):
             return
         current = self.catalogs.get(state.lesson_id)
@@ -1017,7 +1071,8 @@ class ClassroomService:
         """Precompute in idle time; realtime questions preempt this worker."""
         policy = self.config.answering
         if (
-            self.jobs
+            not self.classroom_available
+            or self.jobs
             or not policy.precompute
             or policy.mode == "notify"
             or not policy.providers
@@ -1055,7 +1110,7 @@ class ClassroomService:
 
     async def precompute(self):
         """Analyze question slides once and retain answers across restarts."""
-        while not self.stop.is_set() and not self.jobs:
+        while self.classroom_available and not self.jobs:
             revision = self.courseware_revision
             for state in tuple(self.states.values()):
                 if state.ended:
@@ -1067,7 +1122,11 @@ class ClassroomService:
                     for question in self.cache.questions(
                         state.course_id, presentation
                     ):
-                        if state.ended or self.jobs or self.stop.is_set():
+                        if (
+                            state.ended
+                            or self.jobs
+                            or not self.classroom_available
+                        ):
                             break
                         key = (
                             question.course_id,
@@ -1231,6 +1290,7 @@ class ClassroomService:
                     "presentation_id": presentation,
                     "index": question.index,
                     "options": question.options,
+                    "mode": policy.mode,
                     "name": state.name,
                     "deadline": self.deadlines.get(
                         (
@@ -1510,12 +1570,12 @@ class ClassroomService:
             payload={"accepted": True, "answer": answer, "source": source},
         )
         task = asyncio.create_task(
-            self.verify_submission(state, question, answer)
+            self.verify_submission(state, question, answer, source)
         )
         self.background.add(task)
         task.add_done_callback(self.background.discard)
 
-    async def verify_submission(self, state, question, answer):
+    async def verify_submission(self, state, question, answer, source=None):
         """Read back accepted answers without another answer POST."""
         reason = "result_not_visible"
         for delay in (0, 2):
@@ -1546,7 +1606,13 @@ class ClassroomService:
                         "submission_verified",
                         lesson_id=state.lesson_id,
                         question_id=question.question_id,
-                        payload={"matched": matched, "result_present": True},
+                        payload={
+                            "matched": matched,
+                            "result_present": True,
+                            "accepted": True,
+                            "answer": answer,
+                            "source": source,
+                        },
                     )
                     return
             except RECOVERY_ERRORS as error:
@@ -1559,12 +1625,16 @@ class ClassroomService:
                 "matched": None,
                 "result_present": False,
                 "reason": reason,
+                "accepted": True,
+                "answer": answer,
+                "source": source,
             },
         )
 
     def _check_automatic(self, generation):
         if (
-            self.config.answering.mode != "auto"
+            not self.classroom_available
+            or self.config.answering.mode != "auto"
             or not self.config.answering.automatic_window_open
             or self.runtime.paused
             or (
@@ -1587,19 +1657,31 @@ class ClassroomService:
                 return self.publications[key]
         raise ValueError("teacher has not released this question")
 
+    async def _stop_classroom_work(self, phase):
+        async with self.classroom_stop_lock:
+            for state in self.states.values():
+                if not state.ended:
+                    state.connection = phase
+            tasks = set(self.listeners.values()) | set(self.jobs.values())
+            tasks.update(
+                self.fetches.values(),
+                self.background,
+                self.catalogs.values(),
+                self.courseware_jobs.values(),
+            )
+            if self.warmer:
+                tasks.add(self.warmer)
+            tasks.discard(asyncio.current_task())
+            for task in tasks:
+                task.cancel()
+            await self.login.close()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self.catalog_checked.clear()
+
     async def close(self):
         """Cancel work, retain ambiguous writes and release resources."""
         self.stop.set()
-        await self.login.close()
-        tasks = list(self.listeners.values()) + list(self.jobs.values())
-        tasks += list(self.fetches.values()) + list(self.background)
-        tasks += list(self.catalogs.values())
-        tasks += list(self.courseware_jobs.values())
-        if self.warmer:
-            tasks.append(self.warmer)
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await self._stop_classroom_work("stopped")
         self._write_status("stopped")
         await self.solver.close()
         self.runtime.close()

@@ -1346,6 +1346,31 @@ class ProtocolServiceTest(
         ]
         self.assertFalse(answers[-1]["payload"]["auto_submit"])
 
+    async def test_classroom_stop_cancels_current_work_and_survives_restart(
+        self,
+    ):
+        self.block_model = True
+        state = LessonState("lesson-1", "course-1", presentation_id="deck-1")
+        self.service.states[state.lesson_id] = state
+        await self.service.handle_message(
+            state, {"op": "unlockproblem", "problem": self.unlock()}
+        )
+        await asyncio.wait_for(self.model_started.wait(), 3)
+        _, stopped = await self.command("stop_classroom")
+        self.assertTrue(stopped["ok"])
+        self.assertFalse(self.service.jobs)
+        self.assertFalse(self.posts)
+        await self.service.close()
+        self.service = ClassroomService(self.config, self.client, self.writer)
+        self.controller = ControlServer(self.service)
+        self.controller.token = "fixture-control"
+        _, status = await self.command("status")
+        self.assertEqual(status["snapshot"]["classroom_phase"], "paused")
+        await self.service.handle_message(
+            state, {"op": "unlockproblem", "problem": self.unlock()}
+        )
+        self.assertFalse(self.service.jobs)
+
     async def test_selecting_auto_applies_only_to_newly_released_questions(
         self,
     ):

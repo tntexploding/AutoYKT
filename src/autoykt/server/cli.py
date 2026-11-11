@@ -154,6 +154,27 @@ async def execute(
         await events.close()
 
 
+def check_health(config) -> int:
+    path = config.storage / "status.json"
+    status = json.loads(path.read_text(encoding="utf-8"))
+    age = (
+        datetime.now(timezone.utc)
+        - datetime.fromisoformat(status["updated_at"])
+    ).total_seconds()
+    print(json.dumps(status))
+    return (
+        0
+        if status["status"] == "running"
+        and age
+        < max(
+            90,
+            config.platform.poll_seconds * 3
+            + config.platform.request_timeout * 2,
+        )
+        else 1
+    )
+
+
 # Each CLI command has its own exit result.
 # pylint: disable-next=too-many-return-statements
 def main(argv: list[str] | None = None) -> int:
@@ -190,24 +211,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
         if args.command == "health":
-            path = config.storage / "status.json"
-            status = json.loads(path.read_text(encoding="utf-8"))
-            age = (
-                datetime.now(timezone.utc)
-                - datetime.fromisoformat(status["updated_at"])
-            ).total_seconds()
-            print(json.dumps(status))
-            return (
-                0
-                if status["status"] == "running"
-                and age
-                < max(
-                    90,
-                    config.platform.poll_seconds * 3
-                    + config.platform.request_timeout * 2,
-                )
-                else 1
-            )
+            return check_health(config)
         if args.command in {"cache", "courseware"}:
             cache = ClassroomCache(
                 config.storage / "classroom.sqlite3", config.platform.base_url

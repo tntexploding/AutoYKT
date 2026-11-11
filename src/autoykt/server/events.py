@@ -82,6 +82,7 @@ class EventWriter:
         kind: str,
         *,
         payload: dict | None = None,
+        journal_payload: dict | None = None,
         dedup_key: str | None = None,
         **identity,
     ):
@@ -106,8 +107,15 @@ class EventWriter:
             "payload": payload or {},
         }
         line = json.dumps(event, ensure_ascii=False)
+        journal = (
+            line
+            if journal_payload is None
+            else json.dumps(
+                {**event, "payload": journal_payload}, ensure_ascii=False
+            )
+        )
         with self.path.open("a", encoding="utf-8") as stream:
-            stream.write(line + "\n")
+            stream.write(journal + "\n")
         logger.info(
             "%s lesson=%s question=%s event_id=%s",
             kind,
