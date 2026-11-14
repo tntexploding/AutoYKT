@@ -1238,6 +1238,32 @@ class ProtocolServiceTest(
         )
         self.assertFalse(self.posts)
 
+    async def test_completed_decks_do_not_require_a_catalog_for_all_visible(
+        self,
+    ):
+        self.config.courseware.download_images = True
+        self.catalog_rejected = True
+        state = LessonState(
+            "lesson-1", "course-1", presentation_id="deck-1"
+        )
+        self.service.states[state.lesson_id] = state
+
+        await self.service.collect_courseware(state, prepare=False)
+        await self.writer.flush()
+
+        summaries = [
+            event["payload"]
+            for event in self.events
+            if event["type"] == "courseware_summary"
+        ]
+        self.assertFalse(state.catalog_ok)
+        self.assertEqual(state.extraction, "all_visible")
+        self.assertEqual(summaries[-1]["status"], "all_visible")
+        self.assertEqual(summaries[-1]["slides"], 3)
+        self.assertEqual(summaries[-1]["failed_presentations"], 0)
+        self.assertEqual(summaries[-1]["images_saved"], 2)
+        self.assertEqual(summaries[-1]["images_expected"], 2)
+
     async def test_released_inline_question_survives_deck_api_refusal(self):
         self.fetch_rejected = True
         state = LessonState("lesson-1", "course-1", presentation_id="deck-1")

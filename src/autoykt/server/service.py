@@ -1003,7 +1003,6 @@ class ClassroomService:
         )
         complete = (
             progress["slides"] > 0
-            and state.catalog_ok
             and not failed
             and not incomplete
             and (not self.config.courseware.download_images or saved == expected)
