@@ -990,6 +990,64 @@ class ProtocolServiceTest(
         self.assertFalse(self.posts)
         self.assertTrue(any(e["type"] == "answer_failed" for e in self.events))
 
+    async def _run_job_with_changjiang_cover(self, updated_cover):
+        fetch = self.client.presentation
+
+        async def signed_presentation(lesson, presentation_id):
+            data = await fetch(lesson, presentation_id)
+            cover = (
+                updated_cover
+                if self.model_started.is_set()
+                else "quiz.png?width=800"
+            )
+            sequence = self.fetch_reads
+            data["slides"][1]["cover"] = (
+                "https://yangtse-pri-ups.yuketang.cn/"
+                f"{cover}&auth_key={1_700_000_000 + sequence}-0-0-{sequence:032x}"
+            )
+            return data
+
+        with (
+            patch.object(
+                self.client, "presentation", side_effect=signed_presentation
+            ),
+            patch.object(
+                self.service.assets, "image", return_value=(PNG, "image/png")
+            ),
+        ):
+            await self.run_job()
+            await asyncio.gather(*tuple(self.service.background))
+        await self.writer.flush()
+        self.assertGreaterEqual(self.fetch_reads, 2)
+
+    async def test_changjiang_cover_signature_rotation_allows_submission(self):
+        self.persist_submitted = True
+        await self._run_job_with_changjiang_cover("quiz.png?width=800")
+        self.assertEqual([post["result"] for post in self.posts], [["B"]])
+        self.assertEqual(
+            [
+                event["payload"]["matched"]
+                for event in self.events
+                if event["type"] == "submission_verified"
+            ],
+            [True],
+        )
+
+    async def test_changed_changjiang_cover_blocks_submission(self):
+        await self._run_job_with_changjiang_cover("revised-quiz.png?width=800")
+        self.assertFalse(self.posts)
+        self.assertIsNone(
+            self.service.cache.submission("lesson-1", "problem-7")
+        )
+        self.assertEqual(
+            [
+                event["payload"]["stage"]
+                for event in self.events
+                if event["type"] == "answer_failed"
+            ],
+            ["submission"],
+        )
+
     async def test_unattended_submission_reads_back_result_without_second_post(
         self,
     ):

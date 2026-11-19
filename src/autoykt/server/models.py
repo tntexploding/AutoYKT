@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -58,6 +59,24 @@ def slide_image_identity(url: str) -> str:
         field for field in fields if not field.startswith(("e=", "token="))
     )
     return parts._replace(query=query).geturl()
+
+
+def _question_image_identity(url: str) -> str:
+    """Compare question images independently of rotating CDN signatures."""
+    if not url.startswith("https://yangtse-pri-ups.yuketang.cn/"):
+        return slide_image_identity(url)
+    parts = urlsplit(url)
+    fields = parts.query.split("&")
+    signing_fields = [
+        field for field in fields if field.partition("=")[0] == "auth_key"
+    ]
+    if len(signing_fields) != 1 or not re.fullmatch(
+        r"auth_key=[0-9]+-[A-Za-z0-9]+-[0-9]+-[A-Fa-f0-9]{32}",
+        signing_fields[0],
+    ):
+        return url
+    fields.remove(signing_fields[0])
+    return parts._replace(query="&".join(fields)).geturl()
 
 
 def normalize_presentation(data: dict) -> dict:
@@ -241,7 +260,7 @@ class Question:
     @property
     def signature(self) -> str:
         """Invalidate answers when text, options or the image change."""
-        return self._signature(slide_image_identity(self.image_url))
+        return self._signature(_question_image_identity(self.image_url))
 
     @property
     def legacy_signature(self) -> str:
